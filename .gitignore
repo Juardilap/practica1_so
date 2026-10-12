@@ -1,0 +1,27 @@
+# Binarios compilados en la raiz o en bin/
+cliente_fifo
+servidor_fifo
+cliente_shm
+servidor_shm
+bin/
+test_parser
+*.exe
+*.out
+
+# Archivos de objeto y bibliotecas
+*.o
+*.so
+*.a
+
+# Archivos temporales y de bloqueo
+*.fifo
+/tmp/so_p1_*.fifo
+*.log
+
+# Entornos de desarrollo y editores
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
