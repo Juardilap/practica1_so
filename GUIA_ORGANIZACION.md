@@ -177,9 +177,25 @@ flowchart TD
 
 ## 6. Guía de Observabilidad para la Sustentación Individual (40%)
 
-El evaluador verificará el conocimiento práctico del kernel de Linux usando las siguientes herramientas:
+El enunciado oficial exige que el grupo observe el comportamiento del programa desde Linux. Durante el desarrollo y la sustentación deberán utilizar, como mínimo, varias de las siguientes herramientas:
 
-### 1. Descriptores de Archivo (`/proc` y `lsof`)
+| Herramienta | Uso Esperado por la Cátedra |
+| :--- | :--- |
+| **`ps` / `pstree`** | Identificar PID, PPID, estado y relación entre procesos (confirmar procesos no emparentados). |
+| **`/proc/<pid>/`** | Examinar información que el kernel expone sobre el proceso (`status`, descriptores y función de espera). |
+| **`lsof`** | Identificar archivos y descriptores abiertos (FIFOs en `/tmp`, archivo CSV). |
+| **`strace`** | Observar llamadas al sistema realizadas por cliente y servidor en tiempo real. |
+| **`ipcs` o herramientas equiv.** | Inspeccionar recursos IPC creados en el kernel (segmentos de memoria compartida). |
+| **`top` / `htop`** | Observar estado y consumo de recursos durante la ejecución (verificando memoria fija y streaming en disco). |
+
+### Las Dos Observaciones Concretas Obligatorias para `LEEME.md`:
+El archivo `LEEME.md` **debe incluir al menos dos observaciones concretas** obtenidas con estas herramientas:
+1. **Observación 1:** Una secuencia de llamadas al sistema observada con `strace` o el estado de un proceso mientras permanece bloqueado esperando una operación IPC (ej. `read()` en FIFO o `futex()` en semáforos, con `/proc/<PID>/wchan` y `/proc/<PID>/status`).
+2. **Observación 2:** La inspección del segmento de memoria compartida con `ipcs -m`, evidencia de su permanencia tras un fallo provocado (`kill -9`), y su eliminación manual mediante `ipcrm -m`.
+
+### Comandos de Ejemplo para Practicar la Sustentación:
+
+#### 1. Descriptores de Archivo (`/proc` y `lsof`)
 ```bash
 # Identificar PIDs de cliente y servidor
 ps -o pid,ppid,stat,wchan,cmd -C servidor_fifo
@@ -192,14 +208,15 @@ ls -l /proc/<PID_SERVIDOR>/fd
 lsof -p <PID_SERVIDOR>
 ```
 
-### 2. Estados de Bloqueo en el Kernel (`wchan`)
+#### 2. Estados de Bloqueo en el Kernel (`wchan` y `status`)
 ```bash
 # Ver en qué función del kernel está esperando el proceso
 cat /proc/<PID_SERVIDOR>/wchan
+cat /proc/<PID_SERVIDOR>/status | grep State
 ```
-*Explicación:* Si el servidor espera datos en una FIFO vacía, `wchan` mostrará `pipe_read` o `fifo_read`. En semáforos, mostrará `futex_wait`. Esto demuestra que el proceso está dormido en el kernel sin consumir CPU.
+*Explicación:* Si el servidor espera datos en una FIFO vacía, `wchan` mostrará `pipe_read` o `fifo_read`. En semáforos, mostrará `futex_wait`. El estado será `S (sleeping)`. Esto demuestra que el proceso está dormido en el kernel sin consumir CPU.
 
-### 3. Trazado de Llamadas al Sistema (`strace`)
+#### 3. Trazado de Llamadas al Sistema (`strace`)
 ```bash
 # Trazar operaciones de E/S en la versión FIFO
 strace -f -e trace=openat,read,write,close,unlink ./servidor_fifo
@@ -208,7 +225,7 @@ strace -f -e trace=openat,read,write,close,unlink ./servidor_fifo
 strace -f -e trace=shmget,shmat,shmdt,shmctl,futex ./servidor_shm
 ```
 
-### 4. Inspección y Limpieza de Recursos System V (`ipcs` e `ipcrm`)
+#### 4. Inspección y Limpieza de Recursos System V (`ipcs` e `ipcrm`)
 ```bash
 # Listar segmentos de memoria compartida activos
 ipcs -m
