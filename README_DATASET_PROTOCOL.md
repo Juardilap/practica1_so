@@ -1,6 +1,6 @@
 # Capa común: protocolo y dataset
 
-Esta base sirve al transporte FIFO y a la futura implementación SHM. Se conservan las firmas públicas, los valores de los enums y las estructuras `Request`, `Response` y `SharedBlock`. En Linux x86-64, `Request` ocupa 132 bytes y `Response` 516; son estructuras nativas para procesos del mismo entorno, no un formato portable entre arquitecturas.
+Esta base sirve a FIFO y SHM. Se conservan las firmas públicas, los códigos y las estructuras `Request` y `Response`. En Linux x86-64, `Request` ocupa 132 bytes y `Response` 516; son estructuras nativas para procesos del mismo entorno, no un formato portable entre arquitecturas. `SharedBlock` se amplió de forma acordada a la versión 2; requiere recompilar juntos los ejecutables SHM.
 
 ## Contrato de respuestas
 
@@ -32,22 +32,22 @@ El formato es de una fila por línea: no soporta campos con saltos de línea int
 
 El archivo se recorre secuencialmente en cada consulta. La memoria del buffer es proporcional a la mayor línea leída, no al número total de registros. El dataset incluido tiene 44.691 registros y un encabezado (44.692 líneas).
 
-## Integración con Persona 3
+## Integración de Persona 3
 
-`SharedBlock`, `SHM_KEY` y sus tres semáforos permanecen sin cambios. La implementación SHM está pendiente y no hay objetivos SHM en el Makefile actual.
+Se conservan `SHM_KEY` y los tres semáforos. `SharedBlock` añade marca, versión, tamaño, publicación atómica de inicialización y registro, PID e identidad de inicio de ambos procesos. El cliente comprueba propietario, tamaño, versión e inicialización antes de usar semáforos. La publicación release/acquire hace visibles los metadatos inicializados.
 
-El futuro callback SHM debe publicar cada respuesta y esperar su confirmación de consumo, comprobando los retornos y `EINTR`. Esto incluye `NOT_FOUND`, `END`, `ERROR` y `BYE`: el cliente debe confirmar la lectura del último mensaje antes de terminar, para no dejar al servidor esperando. Devolver un valor negativo si falla la entrega y definir la política de terminación de ambos procesos. Los tres semáforos por sí solos no resuelven la muerte de un proceso.
+`shm_emit()` publica cada respuesta y espera su confirmación de consumo. El cliente copia y confirma todos los mensajes, incluidos `NOT_FOUND`, `END`, `ERROR`, `BYE` y los mensajes inválidos recibidos, antes de procesarlos o salir. Un fallo de entrega devuelve negativo. Los tres semáforos por sí solos no detectan la muerte de un proceso: `shm_utils.c` combina esperas de 200 ms con `pidfd`, identidad de inicio y estado atómico. El detalle y los límites están en [LEEME.md](LEEME.md).
 
-La corrección común se propone mediante `codex/fifo-common-fixes` hacia `develop`, conservando los cuatro commits de Persona 2. Tras la aprobación de Persona 4 y la integración del PR:
+La base común/FIFO ya entró en `develop` mediante PR #1. La integración actual conserva por merge el trabajo original de Persona 3 en `feature/testing-docs`. Para revisar esa base conjunta:
 
 ```bash
 git fetch origin
-git switch feature/shared-memory
-git merge origin/develop
+git switch feature/testing-docs
+git merge --ff-only origin/feature/testing-docs
 make test
 ```
 
-Resolver cualquier conflicto respetando el trabajo nuevo de Persona 3. No hacer reset, rebase forzado ni sobrescribir su rama. La actualización de `main` corresponde a una etapa posterior.
+El siguiente PR es `feature/testing-docs` → `develop`; `develop` → `main` corresponde a la entrega final aprobada. Preservar el historial mediante merge.
 
 ## Validación reproducible
 
@@ -61,5 +61,7 @@ make test
 - `tests/test_dataset.c`: CSV válido y malformado, encabezado, vacíos, NUL, operación inválida, callbacks fallidos en filas y mensajes terminales. Inyecta errores de lectura y cierre mediante wrappers de enlace que solo existen en el ejecutable de prueba.
 - `tests/test_ipc.c`: transferencias fragmentadas, EOF parcial, `EINTR`, `EPIPE` y cancelación.
 - `tests/test_fifo.py`: ejecutables reales, entradas juntas/graduales, señales, errores y propiedad de recursos. Ver [README_FIFO.md](README_FIFO.md).
+- `tests/test_shm.py`: las nueve búsquedas sobre SHM, entrada, errores terminales, inicialización, exclusión, señales, muerte de procesos, acuses y limpieza segura.
+- `tests/test_cleanup.py`: rechazo de sesiones FIFO activas, descriptores abiertos, archivos normales y enlaces; conservación del inode de bloqueo.
 
-Estas pruebas cubren los escenarios enumerados; no constituyen una certificación de ausencia de errores ni validan SHM.
+Estas pruebas cubren los escenarios enumerados; no constituyen una certificación de ausencia de errores. Los resultados y el commit observado se registran en el LEEME.

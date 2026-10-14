@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <semaphore.h>
 #include <sys/types.h>
+#include <stdint.h>
+#include <stdatomic.h>
 
 /* =========================================================================
  * Constantes de configuracion de IPC y buffers
@@ -20,7 +22,14 @@
 #ifndef FIFO_LOCK
 #define FIFO_LOCK  "/tmp/so_p1_fifo.lock"
 #endif
+#ifndef SHM_KEY
 #define SHM_KEY    0x503141
+#endif
+#ifndef SHM_CLIENT_LOCK
+#define SHM_CLIENT_LOCK "/tmp/so_p1_shm_client.lock"
+#endif
+#define SHM_MAGIC UINT32_C(0x534f5031)
+#define SHM_VERSION 2
 
 /* =========================================================================
  * Operaciones solicitadas por el cliente
@@ -36,7 +45,7 @@ typedef enum {
  * Tipos de respuesta emitidos por el servidor
  * Contrato: ROW+ -> END; NOT_FOUND -> END; ERROR terminal (sin END);
  * OP_EXIT -> BYE. Tras ERROR se cierra la sesion. NOT_FOUND no es terminal.
- * Las estructuras/codigos se conservan para FIFO y la futura version SHM.
+ * Request/Response y sus codigos se comparten entre FIFO y SHM.
  * ========================================================================= */
 typedef enum {
     RESP_ROW = 1,       /* Fila coincidente formateada */
@@ -74,9 +83,20 @@ typedef struct {
     sem_t req_ready;            /* Cliente publica solicitud -> Servidor despierta */
     sem_t resp_ready;           /* Servidor publica fila -> Cliente despierta */
     sem_t resp_consumed;        /* Cliente confirma lectura -> Servidor continua */
-    int state;                  /* Estado de ciclo de vida (CommState) */
+    _Atomic int state;          /* Solo el servidor publica el ciclo de vida */
     Request request;            /* Buffer de solicitud activa */
     Response response;          /* Buffer de respuesta activa en streaming */
+    uint32_t magic;
+    uint32_t version;
+    size_t block_size;
+    pid_t server_pid;
+    unsigned long long server_start;
+    pid_t client_pid;
+    unsigned long long client_start;
+    /* Kernel zero-initializes a new segment. Publish metadata with release;
+     * readers use acquire before touching metadata or initialized semaphores. */
+    _Atomic int initialized;
+    _Atomic int client_registered;
 } SharedBlock;
 
 #endif /* PROTOCOL_H */

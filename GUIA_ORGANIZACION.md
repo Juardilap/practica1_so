@@ -1,8 +1,8 @@
 # Guía Completa de Organización y Desarrollo: Práctica 1 de Sistemas Operativos
 
-> Estado de esta etapa: base común y FIFO implementadas; SHM, los scripts de observación y el LEEME final siguen pendientes. Los árboles y fases siguientes incluyen entregables futuros. Para ejecutar la base actual: `make test`. El contrato vigente y los límites comprobados están en [README_DATASET_PROTOCOL.md](README_DATASET_PROTOCOL.md) y [README_FIFO.md](README_FIFO.md).
+> Estado: base común, FIFO y SHM integradas en `feature/testing-docs`. `make test` ejecuta la matriz conjunta. [LEEME.md](LEEME.md) contiene arquitectura, observaciones y límites; estas guías son apoyo y no sustituyen el enunciado oficial.
 >
-> Integración acordada: `codex/fifo-common-fixes` → PR a `develop` → revisión de Persona 4 → integración → merge de `origin/develop` en `feature/shared-memory` y nueva validación. Conservar los commits de Persona 2 y cualquier trabajo nuevo de Persona 3. No actualizar `main` en esta etapa.
+> Flujo: `feature/testing-docs` incorpora por merge `develop` y `feature/shared-memory`; PR hacia `develop` para validación de Persona 4 y revisión cruzada de Persona 2. Solo después de aprobación final abrir `develop` → `main` y probar el candidato exacto. Sin squash, rebase ni force-push.
 
 **Procesos, Llamadas al Sistema e IPC en Linux (World Cities)**
 
@@ -47,7 +47,7 @@ graph LR
 | **Persona 1** | **Dataset + Protocolo Común** | • `include/protocol.h`<br>• `include/dataset.h` y `src/dataset.c`<br>• Parser CSV tolerante a comillas y `\r\n`<br>• `search_dataset()` secuencial streaming<br>• Criterios (Ciudad, País, ISO2) e insensibilidad a mayúsculas | **Persona 3** |
 | **Persona 2** | **Versión A: FIFOs (Tuberías Nombradas)** | • `src/servidor_fifo.c`<br>• `src/cliente_fifo.c`<br>• Creación y apertura segura de FIFOs<br>• Manejo de bloqueos y `SIGPIPE`<br>• Limpieza con `unlink()` | **Persona 4** |
 | **Persona 3** | **Versión B: SHM + Sincronización** | • `src/servidor_shm.c`<br>• `src/cliente_shm.c`<br>• Gestión del bloque System V (`SharedBlock`)<br>• Protocolo de 3 semáforos sin busy-waiting (`req_ready`, `resp_ready`, `resp_consumed`)<br>• Limpieza con `sem_destroy`/`shmctl(IPC_RMID)` | **Persona 1** |
-| **Persona 4** | **Integración, Calidad y Observabilidad** | • `Makefile` estricto (`-Wall -Wextra -Wpedantic -pthread`)<br>• `include/ipc_utils.h` y `src/ipc_utils.c`<br>• Scripts: `test_matrix.sh`, `observe.sh`, `cleanup_ipc.sh`<br>• Configuración de Git, ramas y PRs<br>• Documentación `LEEME.md` y checklist de aceptación | **Persona 2** |
+| **Persona 4** | **Integración, Calidad y Observabilidad** | • Makefile estricto y matriz conjunta<br>• Revisión de utilidades IPC y SHM<br>• `test_matrix.sh`, `observe.py`, `capture_evidence.py`, `cleanup_ipc.py`<br>• Ramas y PRs<br>• LEEME y evidencias reproducidas | **Persona 2** |
 
 > [!IMPORTANT]
 > **Regla de oro del equipo:** Cada integrante tiene un código principal, pero **todos deben saber ejecutar, explicar con `strace`/`/proc` y modificar cualquier módulo**, ya que el profesor evalúa individualmente.
@@ -124,7 +124,7 @@ flowchart TD
    - Inicializar Git local, configurar `.gitignore`, ramas `main`, `develop` y ramas de características.
    - Validar herramientas en WSL2: `gcc`, `make`, `strace`, `lsof`, `ipcs/ipcrm`.
 2. **Fase 2 — Protocolo y Estructuras Comunes (`protocol.h`):**
-   - Congelar estructuras: `Request`, `Response`, `SharedBlock`, enums `Operation` y `ResponseType`.
+   - Conservar `Request`, `Response` y códigos. `SharedBlock` versión 2 añade metadatos atómicos e identidades; recompilar juntos ambos ejecutables SHM y rechazar segmentos incompatibles.
 3. **Fase 3 — Parser CSV y Búsqueda Secuencial (Sin IPC):**
    - Implementar `parse_csv_line()` (manejo de comillas, comas internas, `\r\n`).
    - Implementar `search_dataset()` con `getline()` (memoria proporcional a la mayor línea) y `strcasecmp`.
@@ -141,14 +141,14 @@ flowchart TD
    - Validar intercambio simple de mensaje sin busy-waiting.
 7. **Fase 7 — Versión SHM Completa + Dataset:**
    - Streaming ordenado: Servidor emite fila, activa `resp_ready`, espera `resp_consumed` del cliente antes de emitir la siguiente.
-   - Cero pérdida de registros, cero condición de carrera.
+   - Validar orden y cantidad de registros, inicialización concurrente y acuses terminales mediante pruebas.
 8. **Fase 8 — Robustez, Señales y Limpieza:**
    - Manejadores `sigaction()` para `SIGINT`/`SIGTERM` con limpieza automática.
    - Detección de `SIGPIPE`/`EPIPE` en desconexiones abruptas del cliente.
-   - Script de emergencia `cleanup_ipc.sh`.
+   - Script de emergencia `cleanup_ipc.py`, con verificación de propiedad e inactividad.
 9. **Fase 9 — Pruebas y Observabilidad del SO:**
    - Matriz automatizada `test_matrix.sh` (casos F1–F6 y E1–E6).
-   - Script interactivo de inspección `observe.sh` (`ps`, `lsof`, `/proc`, `strace`, `ipcs`).
+   - Inspección con `observe.py` y captura reproducible con `capture_evidence.py` (`ps`, `lsof`, `/proc`, `strace`, `ipcs`).
 10. **Fase 10 — Integración Final, LEEME.md y Sustentación:**
     - Fusión a `develop` y `main` vía Pull Requests revisados.
     - Documentación `LEEME.md` exhaustiva.
@@ -173,16 +173,16 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | **E1** | Dataset no encontrado | Mover/renombrar `worldcities.csv` | Servidor muestra error claro por `stderr` y libera IPC antes de salir. |
 | **E2** | Entrada de longitud excesiva | Cadena > 127 bytes | Cliente rechaza la línea completa limpiamente sin desbordar buffer. |
-| **E3** | Iniciar cliente antes del servidor | Servidor no arrancado | En FIFO, si las rutas no existen falla con `ENOENT`; con rutas residuales puede esperar en `open()`. El comportamiento SHM se validará cuando se implemente. |
-| **E4** | Muerte abrupta del cliente | `kill -9 <pid_cliente>` durante consulta | Servidor detecta `EPIPE`/`EOF`, ignora `SIGPIPE`, termina la sesión con error y libera recursos, sin reconexión automática. |
+| **E3** | Iniciar cliente antes del servidor | Servidor no arrancado | FIFO falla si no hay rutas y puede esperar en `open()` con residuos. SHM falla si no hay segmento; si existe en inicialización, espera hasta cinco segundos. |
+| **E4** | Muerte abrupta del cliente | `kill -9 <pid_cliente>` durante consulta | FIFO detecta EOF/EPIPE. SHM detecta muerte mediante pidfd y esperas de 200 ms. Sesión termina con fallo y libera recursos, sin reconexión. |
 | **E5** | Muerte abrupta del servidor | `kill -9 <pid_servidor>` | Se detecta recurso residual con `ipcs -m` o `ls /tmp/*.fifo` y se limpia con script. |
-| **E6** | Reinicio tras fallo previo | Recurso existente en `/tmp` o SHM | El servidor recrea o reutiliza limpiamente sin fallar por `EEXIST`. |
+| **E6** | Reinicio tras fallo previo | Recurso existente en `/tmp` o SHM | FIFO valida y reutiliza FIFOs. SHM rechaza segmentos existentes con EEXIST; eliminar únicamente un SHMID residual verificado y volver a iniciar. |
 
 ---
 
 ## 6. Guía de Observabilidad para la Sustentación Individual (40%)
 
-El enunciado oficial exige que el grupo observe el comportamiento del programa desde Linux. Durante el desarrollo y la sustentación deberán utilizar, como mínimo, varias de las siguientes herramientas:
+La guía de apoyo propone observar el comportamiento desde Linux con las siguientes herramientas. Contrastar la entrega con el enunciado oficial antes de aprobar `main`:
 
 | Herramienta | Uso Esperado por la Cátedra |
 | :--- | :--- |
@@ -219,7 +219,7 @@ lsof -p <PID_SERVIDOR>
 cat /proc/<PID_SERVIDOR>/wchan
 cat /proc/<PID_SERVIDOR>/status | grep State
 ```
-*Explicación:* Con aperturas bloqueantes, un servidor iniciado solo espera primero en `open()`; la espera en `read()` requiere un escritor conectado. La implementación FIFO cancelable actual espera en `ppoll`, tanto al conectar como al recibir/enviar. Capturar el `wchan` real según el kernel, sin suponer su nombre. Las esperas de semáforos se verificarán con la implementación SHM. Esto demuestra que el proceso está dormido en el kernel sin consumir CPU.
+*Explicación:* Con aperturas bloqueantes, un servidor iniciado solo espera primero en `open()`; `read()` requiere un escritor conectado. FIFO cancelable espera en `ppoll`, al conectar y recibir/enviar. SHM usa `sem_clockwait`, visible como `futex` al esperar. Capturar el `wchan` real según el kernel. Un estado dormido evidencia suspensión en ese instante, no constituye una medición de consumo total de CPU.
 
 #### 3. Trazado de Llamadas al Sistema (`strace`)
 ```bash
@@ -255,7 +255,7 @@ ipcrm -m <SHMID>
      - `resp_ready`: El cliente espera a que el servidor termine de escribir una respuesta.
      - `resp_consumed`: El servidor espera a que el cliente lea la fila actual antes de escribir la siguiente, evitando que se sobreescriban datos en streaming.
 5. **¿Qué es espera activa (*busy waiting*) y cómo la evitamos?**
-   - *Respuesta:* Es consultar continuamente una variable en un bucle `while(flag != 1) {}`, consumiendo el 100% de un núcleo de CPU. Se evita usando `sem_wait()`, lo cual suspende el proceso en el kernel hasta que llega un `sem_post()`.
+   - *Respuesta:* Es consultar continuamente una variable sin suspender el proceso. SHM usa `sem_clockwait(CLOCK_MONOTONIC)` con esperas de 200 ms; un `sem_post` lo despierta antes. Al vencer el intervalo, comprueba señales y vida del otro proceso; una consulta larga no vence mientras el servidor siga vivo.
 6. **¿Qué diferencia hay entre `shmdt()` y `shmctl(..., IPC_RMID, ...)`?**
    - *Respuesta:* `shmdt()` solo desvincula el bloque del espacio virtual del proceso actual. `shmctl(IPC_RMID)` marca el segmento para su destrucción en el kernel una vez todos los procesos lo hayan desvinculado.
 7. **¿Por qué el archivo CSV no se carga completo en memoria RAM?**
@@ -264,4 +264,4 @@ ipcrm -m <SHMID>
 
 Búsqueda con resultados: `RESP_ROW` repetido → `RESP_END`. Sin resultados: `RESP_NOT_FOUND` → `RESP_END`. Error: `RESP_ERROR` terminal, sin `END`; cerrar la sesión. Salida: `RESP_BYE`. Cualquier callback negativo detiene inmediatamente las emisiones y `search_dataset()` devuelve `-1`. CSV inválido (incluido encabezado), errores de lectura y de cierre abortan la consulta; las filas anteriores a un error son parciales.
 
-En SHM, confirmar el consumo de todos los mensajes, incluidos los terminales, antes de salir. El diseño y validación de esa sincronización corresponde a Persona 3.
+En SHM, confirmar todos los mensajes antes de procesarlos o salir. Los handlers solo marcan terminación; la limpieza ocurre en el flujo normal. Persona 4 valida la integración y Persona 2 la revisa antes de incorporar en `develop`.

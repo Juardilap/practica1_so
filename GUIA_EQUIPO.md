@@ -1,8 +1,8 @@
 # Guía de Trabajo para el Equipo: 4 Integrantes y 4 Ramas
 
-> Estado de esta etapa: base común y FIFO implementadas; SHM, los scripts de observación y el LEEME final siguen pendientes. Los árboles y fases siguientes incluyen entregables futuros. Para ejecutar la base actual: `make test`. El contrato vigente y los límites comprobados están en [README_DATASET_PROTOCOL.md](README_DATASET_PROTOCOL.md) y [README_FIFO.md](README_FIFO.md).
+> Estado: FIFO y SHM integradas en `feature/testing-docs`, con pruebas y herramientas de observación/limpieza. Ejecutar `make test`. Consultar [LEEME.md](LEEME.md) para arquitectura, evidencias, límites y recuperación. Esta guía de equipo es apoyo de trabajo; no sustituye el enunciado oficial.
 >
-> Integración acordada: `codex/fifo-common-fixes` → PR a `develop` → revisión de Persona 4 → integración → merge de `origin/develop` en `feature/shared-memory` y nueva validación. Conservar los commits de Persona 2 y cualquier trabajo nuevo de Persona 3. No actualizar `main` en esta etapa.
+> Integración acordada: merge de `develop` y `feature/shared-memory` en `feature/testing-docs` → PR a `develop` → validación de Persona 4 y revisión cruzada de Persona 2 → merge aprobado. Abrir `develop` → `main` solo para entrega final aprobada, probando el candidato exacto. Preservar todos los commits; sin squash, rebase ni force-push.
 
 **Práctica 1 de Sistemas Operativos — Universidad Nacional de Colombia**
 
@@ -34,18 +34,23 @@ practica1_so/
 ├── include/
 │   ├── protocol.h             # Definición de Request, Response, SharedBlock, constantes y enums
 │   ├── dataset.h              # Prototipos del parser y search_dataset()
-│   └── ipc_utils.h            # Prototipos de read_full(), write_full() y manejo de señales
+│   ├── ipc_utils.h            # Transferencias completas y cancelables
+│   ├── console_input.h        # Lector persistente compartido por los dos clientes
+│   └── shm_utils.h            # Sesión SHM, identidad, esperas y limpieza
 ├── src/
 │   ├── dataset.c              # Parser de comillas CSV y búsqueda secuencial línea a línea
 │   ├── ipc_utils.c            # Transferencias completas, EINTR y espera cancelable con ppoll
+│   ├── console_input.c        # Menú, entrada por lotes, EOF y líneas excesivas
+│   ├── shm_utils.c            # Publicación atómica, pidfd y sem_clockwait
 │   ├── cliente_fifo.c         # Cliente interactivo y CLI para versión FIFO
 │   ├── servidor_fifo.c        # Servidor de búsqueda para versión FIFO
 │   ├── cliente_shm.c          # Cliente interactivo y CLI para versión Memoria Compartida
 │   └── servidor_shm.c         # Servidor de búsqueda para versión Memoria Compartida
 ├── scripts/
-│   ├── test_matrix.sh         # Suite automatizada de pruebas (F1-F6 y E1-E6)
-│   ├── observe.sh             # Script con comandos de observabilidad (ps, /proc, lsof, strace, ipcs)
-│   └── cleanup_ipc.sh         # Script de emergencia para limpiar FIFOs y SHM residuales
+│   ├── test_matrix.sh         # Ejecuta la matriz completa con make test
+│   ├── observe.py             # ps, /proc, lsof e ipcs para PIDs explícitos
+│   ├── capture_evidence.py    # Capturas reproducibles con recursos privados
+│   └── cleanup_ipc.py         # Rechaza recursos activos, ajenos o no verificables
 ├── tests/
 │   └── test_parser.c          # Harness de prueba para validar el parser y dataset sin IPC
 ├── Makefile                   # Reglas de compilación estricta (-Wall -Wextra -Wpedantic -pthread)
@@ -79,9 +84,9 @@ gitGraph
    checkout feature/shared-memory
    commit id: "Persona 3: cliente/servidor shm"
    checkout develop
-   merge feature/shared-memory
    branch feature/testing-docs
    checkout feature/testing-docs
+   merge feature/shared-memory
    commit id: "Persona 4: tests, observe, LEEME"
    checkout develop
    merge feature/testing-docs
@@ -175,21 +180,21 @@ gitGraph
   ```
 - **Archivos a su cargo:**
   1. `src/servidor_shm.c`:
-     - Crear bloque de memoria System V con `shmget(SHM_KEY, sizeof(SharedBlock), IPC_CREAT | 0660)` y enlazar con `shmat()`.
+     - Crear exclusivamente con `shmget(SHM_KEY, sizeof(SharedBlock), IPC_CREAT | IPC_EXCL | 0660)`; nunca reinicializar un segmento existente. La gestión está en `shm_utils.c`.
      - Inicializar los 3 semáforos POSIX en memoria compartida:
        - `sem_init(&shm->req_ready, 1, 0)` (`pshared=1`)
        - `sem_init(&shm->resp_ready, 1, 0)`
        - `sem_init(&shm->resp_consumed, 1, 0)`
-     - Bucle: esperar solicitud con `sem_wait(&shm->req_ready)`.
+     - Publicar metadatos e inicialización mediante atómicos release/acquire. Esperar solicitud con `shm_wait()`: `sem_clockwait(CLOCK_MONOTONIC)` en intervalos de 200 ms, comprobando señales, estado y vida del cliente con `pidfd`.
      - Por cada fila encontrada:
        1. Copiar fila a `shm->response`.
        2. Señalizar disponibilidad: `sem_post(&shm->resp_ready)`.
-       3. Esperar confirmación de lectura del cliente: `sem_wait(&shm->resp_consumed)` (**evita que se sobrescriba el buffer antes de que el cliente lo lea**).
-     - Al salir: destruir semáforos con `sem_destroy()`, desenlazar con `shmdt()` y destruir segmento en el kernel con `shmctl(shmid, IPC_RMID, NULL)`.
+       3. Esperar confirmación con `shm_wait(..., &shm->resp_consumed)` antes de sobrescribir el buffer; también confirmar mensajes terminales.
+     - Al salir: publicar cierre, marcar `IPC_RMID`, esperar hasta dos segundos al desacoplamiento y destruir semáforos solo si no hay usuarios. Comprobar retornos y desacoplar con `shmdt()`.
   2. `src/cliente_shm.c`:
-     - Enlazarse al bloque existente con `shmget(SHM_KEY, sizeof(SharedBlock), 0660)` y `shmat()`.
+     - Tomar bloqueo exclusivo de cliente; comprobar propietario, tamaño, versión e identidad del creador. Esperar inicialización hasta cinco segundos antes de tocar semáforos; rechazar segmentos incompatibles o residuales.
      - Menú interactivo: copiar solicitud a `shm->request` y notificar con `sem_post(&shm->req_ready)`.
-     - Bucle de lectura: `sem_wait(&shm->resp_ready)`, imprimir fila, y confirmar con `sem_post(&shm->resp_consumed)`.
+     - Bucle de lectura: `shm_wait(..., &shm->resp_ready)`, copiar mensaje, confirmar con `sem_post(&shm->resp_consumed)` y luego procesarlo. `ERROR` cierra con fallo; EOF envía `OP_EXIT`. Usar el lector común `console_input.c`.
 - **Cómo validar tu trabajo:**
   - Ejecutar servidor y cliente en terminales separadas.
   - Comprobar con `ipcs -m` que el bloque de memoria existe con permisos 660.
@@ -213,22 +218,22 @@ gitGraph
 - **Archivos a su cargo:**
   1. `Makefile`:
      - Compilación estricta con flags: `CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -D_GNU_SOURCE -Iinclude`, `LDFLAGS = -pthread`.
-     - Targets actuales: `all`, `cliente_fifo`, `servidor_fifo`, `clean`, `test`. Añadir objetivos SHM solo cuando existan sus fuentes; los scripts de observación/limpieza son trabajo posterior.
+     - Targets actuales: `all`, los cuatro ejecutables FIFO/SHM, `clean`, `test` y binarios aislados de prueba; SHM enlaza con `-pthread`.
   2. `include/ipc_utils.h` y `src/ipc_utils.c`:
      - Implementar `read_full()` y `write_full()` que manejen fragmentación de bytes, `EINTR` y `EPIPE`.
      - Implementar registro de manejadores `sigaction()` para captura limpia de `SIGINT` y `SIGTERM`.
   3. `scripts/test_matrix.sh`:
-     - Script ejecutable que automatice las pruebas F1-F6 y E1-E6.
-  4. `scripts/observe.sh`:
-     - Script interactivo con menú para inspeccionar en vivo con `ps`, `pstree`, `/proc/<pid>/fd`, `/proc/<pid>/wchan`, `lsof`, `strace` e `ipcs`.
-  5. `scripts/cleanup_ipc.sh`:
+     - Ejecutar con `bash scripts/test_matrix.sh`: pruebas C, 15 casos FIFO, 18 SHM y limpieza FIFO; muchos contienen varios subcasos.
+  4. `scripts/observe.py` y `scripts/capture_evidence.py`:
+     - Inspeccionar PIDs explícitos con `ps`, `/proc`, `lsof` e `ipcs`; capturar `strace` desde el arranque en un entorno privado reproducible.
+  5. `scripts/cleanup_ipc.py`:
      - Script de limpieza de emergencia: verificar que no haya sesión activa y comprobar identidad/tipo antes de retirar recursos residuales; no borrar el archivo de bloqueo de una sesión ni usar limpieza global sobre recursos ajenos.
   6. `LEEME.md`:
-     - Documentar la entrega completa según la rúbrica oficial, incluyendo **las dos observaciones concretas de Linux obtenidas con `strace` y `/proc`**.
+     - Revisar el LEEME y las dos observaciones capturadas; contrastar la guía de apoyo con el enunciado oficial antes de aprobar la entrega final.
 - **Cómo validar tu trabajo:**
   ```bash
   make clean && make
-  make test  # La matriz conjunta con SHM queda pendiente
+  make test
   ```
 - **Cómo entregar tu rama:**
   ```bash
@@ -241,7 +246,7 @@ gitGraph
 
 ## 5. Tabla de Herramientas del Sistema Operativo Obligatorias
 
-El enunciado exige que el grupo observe el comportamiento del programa desde Linux y documente al menos **dos observaciones concretas** en `LEEME.md`. Durante la sustentación (40%), el profesor pedirá usar estas herramientas:
+La guía de apoyo solicita al menos **dos observaciones concretas** en `LEEME.md`. Preparar la sustentación con estas herramientas y contrastar los requisitos con el enunciado oficial:
 
 | Herramienta | Uso Esperado en la Práctica | Comando Ejemplo para Probar |
 | :--- | :--- | :--- |
@@ -259,7 +264,7 @@ El enunciado exige que el grupo observe el comportamiento del programa desde Lin
    - Registrar el `wchan` real y el estado en `/proc/<PID>/status`; el nombre de espera depende del kernel y no debe suponerse `pipe_read`.
    - Mostrar cómo, al iniciar el cliente y enviar una consulta, `ppoll` indica disponibilidad y después se leen los bytes recibidos.
 2. **Observación 2 (Inspección y Limpieza de Memoria Compartida con `ipcs` e `ipcrm`):**
-   - Iniciar `servidor_shm`, listar con `ipcs -m` mostrando `shmid`, `nattch = 1` y clave `0x00503141`.
+   - Iniciar `servidor_shm`, listar con `ipcs -m` mostrando `shmid`, `nattch = 1` y clave `0x00503141`. El capturador usa una clave privada y registra su valor real. Al conectar el cliente, observar `nattch = 2`.
    - Provocar una terminación abrupta con `kill -9 $PID_SERVIDOR` (simulando un fallo sin cleanup).
    - Mostrar que el segmento permanece huérfano en el kernel con `nattch = 0`.
    - Documentar la eliminación manual con `ipcrm -m <shmid>`.
@@ -276,4 +281,4 @@ El enunciado exige que el grupo observe el comportamiento del programa desde Lin
 
 Búsqueda con resultados: `RESP_ROW` repetido → `RESP_END`. Sin resultados: `RESP_NOT_FOUND` → `RESP_END`. Error: `RESP_ERROR` terminal, sin `END`; cerrar la sesión. Salida: `RESP_BYE`. Cualquier callback negativo detiene inmediatamente las emisiones y `search_dataset()` devuelve `-1`. CSV inválido (incluido encabezado), errores de lectura y de cierre abortan la consulta; las filas anteriores a un error son parciales.
 
-En SHM, confirmar el consumo de todos los mensajes, incluidos los terminales, antes de salir. El diseño y validación de esa sincronización corresponde a Persona 3.
+En SHM, confirmar el consumo de todos los mensajes, incluidos los terminales, antes de salir. Persona 4 valida la integración y Persona 2 realiza la revisión cruzada; Persona 3 conserva la autoría de su implementación inicial en el historial.

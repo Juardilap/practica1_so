@@ -20,7 +20,7 @@ printf '1\nAtlantisCity\n1\nTokyo\n2\nColombia\n4\n' | ./cliente_fifo
 
 Se esperan 0, 1 y 714 coincidencias, y salida 0 de ambos procesos. EOF de la entrada del cliente envía `OP_EXIT`, incluso si ocurre esperando el valor de una búsqueda. Una última línea sin salto es válida. Las entradas excesivas se descartan hasta su fin sin consumir la siguiente línea. El límite del criterio es de 127 bytes más NUL.
 
-`make` compila solo FIFO, con C11, `_GNU_SOURCE`, `-Wall -Wextra -Wpedantic -Werror`. `make clean` elimina únicamente los ejecutables conocidos, no recursos IPC de una sesión activa.
+`make` compila los cuatro ejecutables, con C11, `_GNU_SOURCE`, `-Wall -Wextra -Wpedantic -Werror`; SHM añade `-pthread`. `make clean` elimina únicamente los ejecutables conocidos, no recursos IPC de una sesión activa. Los clientes comparten `console_input.c` y su lector persistente basado en `read()`.
 
 ## Sesión y recursos
 
@@ -69,10 +69,10 @@ cat /proc/PID/wchan
 ls -l /proc/PID/fd
 ```
 
-Al iniciar el cliente y enviar una consulta, `ppoll` indica disponibilidad y después ocurre la lectura/escritura. El nombre exacto de `wchan` depende del kernel; no debe prefijarse `pipe_read` como evidencia. Persona 4 debe capturar los resultados reales y completar el `LEEME` final junto con SHM.
+Al iniciar el cliente y enviar una consulta, `ppoll` indica disponibilidad y después ocurre la lectura/escritura. El nombre exacto de `wchan` depende del kernel; no debe prefijarse `pipe_read` como evidencia. Las capturas de la versión integrada están referenciadas en [LEEME.md](LEEME.md); Persona 4 debe revisarlas y reproducirlas para la sustentación.
 
 ## Límites
 
 Una sesión atiende un solo cliente, en el mismo entorno Linux y con acceso a las FIFOs. El cliente requiere que el servidor haya creado las rutas; si no existen falla con `ENOENT`, y si son residuales puede esperar en `open()`. `SIGKILL` no permite limpieza: otro servidor podrá adquirir el bloqueo y reutilizar las FIFOs residuales.
 
-La cancelación del recorrido del CSV se observa en el siguiente callback o ante una lectura interrumpida; no se promete una latencia máxima para recorridos sin coincidencias ni para E/S de almacenamiento no interrumpible. No se implementan SHM, supervisión de procesos ni clientes concurrentes en esta etapa.
+La cancelación del recorrido del CSV se observa en el siguiente callback o ante una lectura interrumpida; no se promete una latencia máxima para recorridos sin coincidencias ni para E/S de almacenamiento no interrumpible. FIFO no incorpora la supervisión con `pidfd` ni el bloqueo de cliente de SHM: iniciar un único cliente FIFO por sesión.
