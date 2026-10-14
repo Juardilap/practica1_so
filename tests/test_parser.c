@@ -62,6 +62,7 @@ static void run_test(const char *test_name, int op, const char *value, int expec
            matches, collector.row_count, collector.end_count, collector.not_found_count, collector.error_count);
     fflush(stdout);
 
+    assert(matches == expected_rows);
     assert(collector.error_count == 0);
     assert(collector.end_count == 1);
     assert(collector.row_count == expected_rows);
@@ -96,7 +97,7 @@ int main(void) {
     run_test("Pais Inexistente (PaisInventado)", OP_COUNTRY, "PaisInventado", 0, 1);
 
     printf("\n==================================================\n");
-    printf("TODAS LAS PRUEBAS DE PERSONA 1 PASARON EXITOSAMENTE (100%% OK)\n");
+    printf("PASARON LAS NUEVE BUSQUEDAS DE REGRESION DEL DATASET\n");
     printf("==================================================\n");
 
     return 0;

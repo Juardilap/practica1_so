@@ -1,4 +1,9 @@
 # Guía de Trabajo para el Equipo: 4 Integrantes y 4 Ramas
+
+> Estado de esta etapa: base común y FIFO implementadas; SHM, los scripts de observación y el LEEME final siguen pendientes. Los árboles y fases siguientes incluyen entregables futuros. Para ejecutar la base actual: `make test`. El contrato vigente y los límites comprobados están en [README_DATASET_PROTOCOL.md](README_DATASET_PROTOCOL.md) y [README_FIFO.md](README_FIFO.md).
+>
+> Integración acordada: `codex/fifo-common-fixes` → PR a `develop` → revisión de Persona 4 → integración → merge de `origin/develop` en `feature/shared-memory` y nueva validación. Conservar los commits de Persona 2 y cualquier trabajo nuevo de Persona 3. No actualizar `main` en esta etapa.
+
 **Práctica 1 de Sistemas Operativos — Universidad Nacional de Colombia**
 
 Esta guía es un manual práctico dirigido a los **4 integrantes del grupo**. Explica paso a paso qué debe hacer cada persona, en qué rama debe trabajar, qué archivos le corresponden, cómo probar su componente y cómo integrarlo con el resto del proyecto.
@@ -7,7 +12,7 @@ Esta guía es un manual práctico dirigido a los **4 integrantes del grupo**. Ex
 
 ## 1. Visión General del Proyecto
 
-- **Objetivo:** Sistema cliente-servidor en lenguaje C sobre Linux (WSL2 Ubuntu 24.04) que busca ciudades en el archivo `data/worldcities.csv` (44.692 líneas) sin cargarlo completo en memoria RAM ($O(1)$ RAM).
+- **Objetivo:** Sistema cliente-servidor en lenguaje C sobre Linux (WSL2 Ubuntu 24.04) que busca ciudades en el archivo `data/worldcities.csv` (44.692 líneas) sin cargarlo completo en memoria RAM (memoria proporcional a la mayor línea).
 - **Dos arquitecturas idénticas en funcionalidad:**
   1. **Versión A (FIFO):** 2 tuberías nombradas (`/tmp/so_p1_req.fifo` y `/tmp/so_p1_resp.fifo`).
   2. **Versión B (SHM):** Memoria compartida System V (`shmget`, `shmat`, `shmdt`, `shmctl`) con 3 semáforos POSIX process-shared (`req_ready`, `resp_ready`, `resp_consumed`).
@@ -25,14 +30,14 @@ Esta guía es un manual práctico dirigido a los **4 integrantes del grupo**. Ex
 ```text
 practica1_so/
 ├── data/
-│   └── worldcities.csv        # Dataset con 44.692 registros (en disco, streaming con getline)
+│   └── worldcities.csv        # Dataset con 44.691 registros y un encabezado (en disco, streaming con getline)
 ├── include/
 │   ├── protocol.h             # Definición de Request, Response, SharedBlock, constantes y enums
 │   ├── dataset.h              # Prototipos del parser y search_dataset()
 │   └── ipc_utils.h            # Prototipos de read_full(), write_full() y manejo de señales
 ├── src/
 │   ├── dataset.c              # Parser de comillas CSV y búsqueda secuencial línea a línea
-│   ├── ipc_utils.c            # Implementación robusta de read_full, write_full y sigaction
+│   ├── ipc_utils.c            # Transferencias completas, EINTR y espera cancelable con ppoll
 │   ├── cliente_fifo.c         # Cliente interactivo y CLI para versión FIFO
 │   ├── servidor_fifo.c        # Servidor de búsqueda para versión FIFO
 │   ├── cliente_shm.c          # Cliente interactivo y CLI para versión Memoria Compartida
@@ -117,8 +122,8 @@ gitGraph
      - Programa de prueba aislado para buscar "Tokyo", "Colombia", "CO" y "CiudadInexistente" sin usar todavía FIFOs ni SHM.
 - **Cómo validar tu trabajo:**
   ```bash
-  gcc -Wall -Wextra -Iinclude src/dataset.c tests/test_parser.c -o test_parser
-  ./test_parser
+  make bin/test_parser
+  ./bin/test_parser
   ```
 - **Cómo entregar tu rama:**
   ```bash
@@ -139,14 +144,14 @@ gitGraph
 - **Archivos a su cargo:**
   1. `src/servidor_fifo.c`:
      - Crear FIFOs de forma idempotente con `mkfifo("/tmp/so_p1_req.fifo", 0660)` y `mkfifo("/tmp/so_p1_resp.fifo", 0660)`.
-     - Orden de apertura bloqueante: abrir `FIFO_REQ` en `O_RDONLY` y luego `FIFO_RESP` en `O_WRONLY`.
+     - Tomar el bloqueo exclusivo de sesión antes de crear/reutilizar las FIFOs. Abrir `FIFO_REQ` en `O_RDONLY | O_NONBLOCK` y luego `FIFO_RESP` en `O_WRONLY | O_NONBLOCK`; esperar con `ppoll` durante la conexión para permitir cancelación sin carreras de señales.
      - Proteger contra caída por desconexión del cliente ignorando `SIGPIPE`: `signal(SIGPIPE, SIG_IGN)` y chequear `errno == EPIPE`.
-     - Bucle de servicio: recibir `Request` con `read_full()`. Si es búsqueda, invocar `search_dataset()`; si es `OP_EXIT`, enviar `RESP_BYE`, cerrar descriptores y hacer `unlink()` de las dos FIFOs.
+     - Bucle de servicio: recibir `Request` con `read_full_cancelable()`. Si es búsqueda, invocar `search_dataset()`; si es `OP_EXIT`, enviar `RESP_BYE`, cerrar descriptores y hacer `unlink()` de las dos FIFOs.
   2. `src/cliente_fifo.c`:
      - Abrir `FIFO_REQ` en `O_WRONLY` y luego `FIFO_RESP` en `O_RDONLY`.
      - Presentar menú por consola con opciones 1 a 4.
      - Enviar `Request` con `write_full()`.
-     - Bucle de lectura con `read_full()` imprimiendo respuestas hasta recibir `RESP_END`, `RESP_NOT_FOUND` o `RESP_BYE`.
+     - Bucle de lectura con `read_full()` imprimiendo respuestas hasta `RESP_END`; `RESP_NOT_FOUND` es informativo y debe consumirse también el `END` posterior. `RESP_ERROR` es terminal sin `END` y cierra la sesión con error; `RESP_BYE` confirma la salida.
 - **Cómo validar tu trabajo:**
   - Abrir dos terminales:
     - Terminal 1: `./servidor_fifo`
@@ -208,7 +213,7 @@ gitGraph
 - **Archivos a su cargo:**
   1. `Makefile`:
      - Compilación estricta con flags: `CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -D_GNU_SOURCE -Iinclude`, `LDFLAGS = -pthread`.
-     - Targets: `all`, `cliente_fifo`, `servidor_fifo`, `cliente_shm`, `servidor_shm`, `clean`, `clean-ipc`, `test`.
+     - Targets actuales: `all`, `cliente_fifo`, `servidor_fifo`, `clean`, `test`. Añadir objetivos SHM solo cuando existan sus fuentes; los scripts de observación/limpieza son trabajo posterior.
   2. `include/ipc_utils.h` y `src/ipc_utils.c`:
      - Implementar `read_full()` y `write_full()` que manejen fragmentación de bytes, `EINTR` y `EPIPE`.
      - Implementar registro de manejadores `sigaction()` para captura limpia de `SIGINT` y `SIGTERM`.
@@ -217,13 +222,13 @@ gitGraph
   4. `scripts/observe.sh`:
      - Script interactivo con menú para inspeccionar en vivo con `ps`, `pstree`, `/proc/<pid>/fd`, `/proc/<pid>/wchan`, `lsof`, `strace` e `ipcs`.
   5. `scripts/cleanup_ipc.sh`:
-     - Script de limpieza de emergencia (`rm -f /tmp/so_p1_*.fifo` e `ipcrm -m <shmid>`).
+     - Script de limpieza de emergencia: verificar que no haya sesión activa y comprobar identidad/tipo antes de retirar recursos residuales; no borrar el archivo de bloqueo de una sesión ni usar limpieza global sobre recursos ajenos.
   6. `LEEME.md`:
      - Documentar la entrega completa según la rúbrica oficial, incluyendo **las dos observaciones concretas de Linux obtenidas con `strace` y `/proc`**.
 - **Cómo validar tu trabajo:**
   ```bash
   make clean && make
-  bash scripts/test_matrix.sh
+  make test  # La matriz conjunta con SHM queda pendiente
   ```
 - **Cómo entregar tu rama:**
   ```bash
@@ -243,16 +248,16 @@ El enunciado exige que el grupo observe el comportamiento del programa desde Lin
 | **`ps` / `pstree`** | Identificar PID, PPID, estado y verificar que cliente y servidor **no son procesos emparentados** (no creados con `fork()`). | `ps -o pid,ppid,stat,wchan,cmd -C servidor_fifo`<br>`pstree -p` |
 | **`/proc/<pid>/`** | Examinar información que el kernel expone sobre el proceso (`status`, descriptores y función de espera). | `cat /proc/$PID/status`<br>`ls -l /proc/$PID/fd`<br>`cat /proc/$PID/wchan` |
 | **`lsof`** | Identificar archivos y descriptores abiertos: ver los dos extremos de las FIFOs en `/tmp` y el archivo `worldcities.csv` abierto por el servidor. | `lsof -p $PID_SERVIDOR`<br>`lsof /tmp/so_p1_req.fifo` |
-| **`strace`** | Observar llamadas al sistema en tiempo real y evidenciar cuándo y dónde se bloquea un proceso. | `strace -f -e trace=openat,read,write,close ./servidor_fifo`<br>`strace -f -e trace=shmget,shmat,futex ./servidor_shm` |
+| **`strace`** | Observar llamadas al sistema en tiempo real y evidenciar cuándo y dónde se bloquea un proceso. | `strace -f -e trace=openat,read,write,ppoll,rt_sigprocmask,close ./servidor_fifo`<br>`strace -f -e trace=shmget,shmat,futex ./servidor_shm` |
 | **`ipcs` / `ipcrm`** | Inspeccionar recursos IPC creados en el kernel (segmentos de memoria compartida) y eliminarlos si quedan huérfanos. | `ipcs -m`<br>`ipcrm -m <SHMID>` |
-| **`top` / `htop`** | Observar estado y consumo de recursos durante la búsqueda, constatando que la memoria RAM se mantiene fija y baja ($O(1)$) porque el archivo se lee secuencialmente desde disco. | `top -p $PID_SERVIDOR` |
+| **`top` / `htop`** | Observar estado y consumo de recursos durante la búsqueda, constatando que la memoria RAM se mantiene proporcional a la mayor línea porque el archivo se lee secuencialmente desde disco. | `top -p $PID_SERVIDOR` |
 
 ### Las Dos Observaciones Obligatorias para `LEEME.md`:
 1. **Observación 1 (Bloqueo en FIFO con `strace` y `wchan`):**
    - Ejecutar el servidor FIFO solo.
-   - Mostrar que `strace` se detiene en `read(...)` esperando datos en el descriptor de la FIFO.
-   - Mostrar que `/proc/<PID>/wchan` contiene `pipe_read` y el estado en `/proc/<PID>/status` es `S (sleeping)`.
-   - Mostrar cómo, al iniciar el cliente y enviar una consulta, `read()` retorna inmediatamente con los bytes recibidos.
+   - En el diseño inicial con aperturas bloqueantes, el servidor solo esperaba primero en `open()`. Solo tras conectar un escritor podía esperar en `read()`. En la versión cancelable actual, observar la espera de conexión y de datos en `ppoll` (ver README_FIFO).
+   - Registrar el `wchan` real y el estado en `/proc/<PID>/status`; el nombre de espera depende del kernel y no debe suponerse `pipe_read`.
+   - Mostrar cómo, al iniciar el cliente y enviar una consulta, `ppoll` indica disponibilidad y después se leen los bytes recibidos.
 2. **Observación 2 (Inspección y Limpieza de Memoria Compartida con `ipcs` e `ipcrm`):**
    - Iniciar `servidor_shm`, listar con `ipcs -m` mostrando `shmid`, `nattch = 1` y clave `0x00503141`.
    - Provocar una terminación abrupta con `kill -9 $PID_SERVIDOR` (simulando un fallo sin cleanup).
@@ -267,3 +272,8 @@ El enunciado exige que el grupo observe el comportamiento del programa desde Lin
 - **Compilador:** `gcc` con `Makefile`.
 - **Ejecutables separados:** Cliente y servidor son programas independientes (no usan `fork()` ni tuberías anónimas heredadas).
 - **Verificación rigurosa de retornos:** En **todas** las llamadas al sistema (`fopen`, `getline`, `mkfifo`, `open`, `read`, `write`, `close`, `unlink`, `shmget`, `shmat`, `shmdt`, `shmctl`, `sem_init`, `sem_wait`, `sem_post`, `sem_destroy`), comprobar siempre si devuelven `-1` o `NULL` e informar el error con `perror()` o `fprintf(stderr, ...)`.
+## Contrato común vigente
+
+Búsqueda con resultados: `RESP_ROW` repetido → `RESP_END`. Sin resultados: `RESP_NOT_FOUND` → `RESP_END`. Error: `RESP_ERROR` terminal, sin `END`; cerrar la sesión. Salida: `RESP_BYE`. Cualquier callback negativo detiene inmediatamente las emisiones y `search_dataset()` devuelve `-1`. CSV inválido (incluido encabezado), errores de lectura y de cierre abortan la consulta; las filas anteriores a un error son parciales.
+
+En SHM, confirmar el consumo de todos los mensajes, incluidos los terminales, antes de salir. El diseño y validación de esa sincronización corresponde a Persona 3.
