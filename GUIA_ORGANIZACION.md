@@ -1,15 +1,20 @@
 # Guía Completa de Organización y Desarrollo: Práctica 1 de Sistemas Operativos
+
+> Estado de esta etapa: base común y FIFO implementadas; SHM, los scripts de observación y el LEEME final siguen pendientes. Los árboles y fases siguientes incluyen entregables futuros. Para ejecutar la base actual: `make test`. El contrato vigente y los límites comprobados están en [README_DATASET_PROTOCOL.md](README_DATASET_PROTOCOL.md) y [README_FIFO.md](README_FIFO.md).
+>
+> Integración acordada: `codex/fifo-common-fixes` → PR a `develop` → revisión de Persona 4 → integración → merge de `origin/develop` en `feature/shared-memory` y nueva validación. Conservar los commits de Persona 2 y cualquier trabajo nuevo de Persona 3. No actualizar `main` en esta etapa.
+
 **Procesos, Llamadas al Sistema e IPC en Linux (World Cities)**
 
 ---
 
 ## 1. Resumen Ejecutivo del Proyecto
 
-- **Objetivo:** Construir una solución cliente-servidor en lenguaje C sobre Linux (bajo WSL2 Ubuntu 24.04 en Windows) para realizar búsquedas secuenciales sobre `data/worldcities.csv` (44.692 registros).
+- **Objetivo:** Construir una solución cliente-servidor en lenguaje C sobre Linux (bajo WSL2 Ubuntu 24.04 en Windows) para realizar búsquedas secuenciales sobre `data/worldcities.csv` (44.691 registros y un encabezado).
 - **Dos arquitecturas obligatorias:**
   1. **Versión A (FIFO):** Tuberías nombradas bidireccionales (`/tmp/so_p1_req.fifo` y `/tmp/so_p1_resp.fifo`).
   2. **Versión B (SHM + Semáforos):** Segmento de memoria System V (`shmget`, `shmat`, `shmdt`, `shmctl`) con 3 semáforos POSIX process-shared (`sem_init` con `pshared=1`).
-- **Restricción central:** El dataset permanece en disco ($O(1)$ RAM, procesado línea a línea con `getline()`).
+- **Restricción central:** El dataset permanece en disco (memoria proporcional a la mayor línea, procesado línea a línea con `getline()`).
 - **Criterios de búsqueda confirmados:**
   1. Ciudad ASCII (`city_ascii`, ej. `Bogota`, `Tokyo`, `Sao Paulo`).
   2. País (`country`, ej. `Colombia`, devolviendo múltiples filas en streaming).
@@ -121,8 +126,8 @@ flowchart TD
 2. **Fase 2 — Protocolo y Estructuras Comunes (`protocol.h`):**
    - Congelar estructuras: `Request`, `Response`, `SharedBlock`, enums `Operation` y `ResponseType`.
 3. **Fase 3 — Parser CSV y Búsqueda Secuencial (Sin IPC):**
-   - Implementar `parse_csv_row()` (manejo de comillas, comas internas, `\r\n`).
-   - Implementar `search_dataset()` con `getline()` ($O(1)$ RAM) y `strcasecmp`.
+   - Implementar `parse_csv_line()` (manejo de comillas, comas internas, `\r\n`).
+   - Implementar `search_dataset()` con `getline()` (memoria proporcional a la mayor línea) y `strcasecmp`.
    - Validar con harness local (`tests/test_parser.c`).
 4. **Fase 4 — Versión FIFO Mínima (Ping-Pong):**
    - Implementar `read_full()` y `write_full()`.
@@ -157,7 +162,7 @@ flowchart TD
 | ID | Caso de Prueba | Entrada de Prueba | Comportamiento Esperado |
 | :--- | :--- | :--- | :--- |
 | **F1** | Buscar ciudad existente | `city_ascii = "Tokyo"` | Uno o varios `RESP_ROW` formateados y cierre con `RESP_END`. |
-| **F2** | Buscar ciudad inexistente | `city_ascii = "AtlantisCity"` | Retorno inmediato de `RESP_NOT_FOUND`. |
+| **F2** | Buscar ciudad inexistente | `city_ascii = "AtlantisCity"` | Tras recorrer el CSV: `RESP_NOT_FOUND` seguido de `RESP_END`; el cliente consume ambos. |
 | **F3** | Buscar país con muchos resultados | `country = "Colombia"` | Cientos de respuestas consecutivas sin bloqueo ni pérdida de datos. |
 | **F4** | Buscar por código ISO2 | `iso2 = "JP"` o `"CO"` | Todos los registros correspondientes al código de dos letras. |
 | **F5** | Consultas consecutivas | Múltiples búsquedas seguidas | El protocolo regresa al estado listo (`STATE_IDLE`) sin reinicios. |
@@ -167,9 +172,9 @@ flowchart TD
 | ID | Caso de Prueba | Condición Provocada | Manejo Esperado |
 | :--- | :--- | :--- | :--- |
 | **E1** | Dataset no encontrado | Mover/renombrar `worldcities.csv` | Servidor muestra error claro por `stderr` y libera IPC antes de salir. |
-| **E2** | Entrada de longitud excesiva | Cadena > 128 caracteres | Cliente valida, trunca o rechaza limpiamente sin desbordar buffer. |
-| **E3** | Iniciar cliente antes del servidor | Servidor no arrancado | En FIFO se bloquea esperando lector/escritor; en SHM muestra mensaje amigable y sale. |
-| **E4** | Muerte abrupta del cliente | `kill -9 <pid_cliente>` durante consulta | Servidor detecta `EPIPE`/`EOF`, no se cae por `SIGPIPE` y se recupera. |
+| **E2** | Entrada de longitud excesiva | Cadena > 127 bytes | Cliente rechaza la línea completa limpiamente sin desbordar buffer. |
+| **E3** | Iniciar cliente antes del servidor | Servidor no arrancado | En FIFO, si las rutas no existen falla con `ENOENT`; con rutas residuales puede esperar en `open()`. El comportamiento SHM se validará cuando se implemente. |
+| **E4** | Muerte abrupta del cliente | `kill -9 <pid_cliente>` durante consulta | Servidor detecta `EPIPE`/`EOF`, ignora `SIGPIPE`, termina la sesión con error y libera recursos, sin reconexión automática. |
 | **E5** | Muerte abrupta del servidor | `kill -9 <pid_servidor>` | Se detecta recurso residual con `ipcs -m` o `ls /tmp/*.fifo` y se limpia con script. |
 | **E6** | Reinicio tras fallo previo | Recurso existente en `/tmp` o SHM | El servidor recrea o reutiliza limpiamente sin fallar por `EEXIST`. |
 
@@ -186,11 +191,11 @@ El enunciado oficial exige que el grupo observe el comportamiento del programa d
 | **`lsof`** | Identificar archivos y descriptores abiertos (FIFOs en `/tmp`, archivo CSV). |
 | **`strace`** | Observar llamadas al sistema realizadas por cliente y servidor en tiempo real. |
 | **`ipcs` o herramientas equiv.** | Inspeccionar recursos IPC creados en el kernel (segmentos de memoria compartida). |
-| **`top` / `htop`** | Observar estado y consumo de recursos durante la ejecución (verificando memoria fija y streaming en disco). |
+| **`top` / `htop`** | Observar estado y consumo de recursos durante la ejecución (verificando lectura secuencial y memoria proporcional a la mayor línea). |
 
 ### Las Dos Observaciones Concretas Obligatorias para `LEEME.md`:
 El archivo `LEEME.md` **debe incluir al menos dos observaciones concretas** obtenidas con estas herramientas:
-1. **Observación 1:** Una secuencia de llamadas al sistema observada con `strace` o el estado de un proceso mientras permanece bloqueado esperando una operación IPC (ej. `read()` en FIFO o `futex()` en semáforos, con `/proc/<PID>/wchan` y `/proc/<PID>/status`).
+1. **Observación 1:** Una secuencia de llamadas al sistema observada con `strace` o el estado de un proceso mientras permanece bloqueado esperando una operación IPC (ej. `ppoll()` en la FIFO cancelable o `futex()` en semáforos, con `/proc/<PID>/wchan` y `/proc/<PID>/status`).
 2. **Observación 2:** La inspección del segmento de memoria compartida con `ipcs -m`, evidencia de su permanencia tras un fallo provocado (`kill -9`), y su eliminación manual mediante `ipcrm -m`.
 
 ### Comandos de Ejemplo para Practicar la Sustentación:
@@ -214,12 +219,12 @@ lsof -p <PID_SERVIDOR>
 cat /proc/<PID_SERVIDOR>/wchan
 cat /proc/<PID_SERVIDOR>/status | grep State
 ```
-*Explicación:* Si el servidor espera datos en una FIFO vacía, `wchan` mostrará `pipe_read` o `fifo_read`. En semáforos, mostrará `futex_wait`. El estado será `S (sleeping)`. Esto demuestra que el proceso está dormido en el kernel sin consumir CPU.
+*Explicación:* Con aperturas bloqueantes, un servidor iniciado solo espera primero en `open()`; la espera en `read()` requiere un escritor conectado. La implementación FIFO cancelable actual espera en `ppoll`, tanto al conectar como al recibir/enviar. Capturar el `wchan` real según el kernel, sin suponer su nombre. Las esperas de semáforos se verificarán con la implementación SHM. Esto demuestra que el proceso está dormido en el kernel sin consumir CPU.
 
 #### 3. Trazado de Llamadas al Sistema (`strace`)
 ```bash
 # Trazar operaciones de E/S en la versión FIFO
-strace -f -e trace=openat,read,write,close,unlink ./servidor_fifo
+strace -f -e trace=openat,read,write,ppoll,rt_sigprocmask,close,unlink,flock ./servidor_fifo
 
 # Trazar operaciones en la versión Memoria Compartida
 strace -f -e trace=shmget,shmat,shmdt,shmctl,futex ./servidor_shm
@@ -243,7 +248,7 @@ ipcrm -m <SHMID>
 2. **¿Por qué no usar `pipe()` anónimo en la Versión A?**
    - *Respuesta:* Las tuberías anónimas creadas con `pipe()` solo pueden ser compartidas entre procesos emparentados mediante herencia de descriptores tras `fork()`. Para procesos independientes se requiere un nodo con nombre en el filesystem (`FIFO` o tubería nombrada creada con `mkfifo`).
 3. **¿Cuándo se bloquea un `read()` en una FIFO?**
-   - *Respuesta:* Cuando la tubería está vacía pero todavía existe al menos un proceso que tiene abierta la FIFO para escritura. Si todos los escritores cierran la FIFO, `read()` devuelve 0 (`EOF`).
+   - *Respuesta:* En un descriptor bloqueante, cuando la tubería está vacía pero todavía existe al menos un proceso que tiene abierta la FIFO para escritura. Si todos los escritores cierran la FIFO, `read()` devuelve 0 (`EOF`).
 4. **¿Por qué se requieren 3 semáforos en la Memoria Compartida?**
    - *Respuesta:*
      - `req_ready`: El servidor espera a que el cliente termine de escribir la petición.
@@ -254,4 +259,9 @@ ipcrm -m <SHMID>
 6. **¿Qué diferencia hay entre `shmdt()` y `shmctl(..., IPC_RMID, ...)`?**
    - *Respuesta:* `shmdt()` solo desvincula el bloque del espacio virtual del proceso actual. `shmctl(IPC_RMID)` marca el segmento para su destrucción en el kernel una vez todos los procesos lo hayan desvinculado.
 7. **¿Por qué el archivo CSV no se carga completo en memoria RAM?**
-   - *Respuesta:* El enunciado prohíbe cargarlo en memoria para evidenciar el acceso a almacenamiento secundario mediante llamadas al sistema del kernel (`read`/`getline`) y mantener la huella de memoria en $O(1)$.
+   - *Respuesta:* El enunciado prohíbe cargarlo en memoria para evidenciar el acceso a almacenamiento secundario mediante llamadas al sistema del kernel (`read`/`getline`) y mantener memoria proporcional a la mayor línea, sin crecer con el número de registros.
+## Contrato común vigente
+
+Búsqueda con resultados: `RESP_ROW` repetido → `RESP_END`. Sin resultados: `RESP_NOT_FOUND` → `RESP_END`. Error: `RESP_ERROR` terminal, sin `END`; cerrar la sesión. Salida: `RESP_BYE`. Cualquier callback negativo detiene inmediatamente las emisiones y `search_dataset()` devuelve `-1`. CSV inválido (incluido encabezado), errores de lectura y de cierre abortan la consulta; las filas anteriores a un error son parciales.
+
+En SHM, confirmar el consumo de todos los mensajes, incluidos los terminales, antes de salir. El diseño y validación de esa sincronización corresponde a Persona 3.
