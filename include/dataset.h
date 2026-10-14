@@ -41,7 +41,9 @@ typedef int (*emit_response_fn)(const Response *resp, void *ctx);
 /*
  * Parsea una linea CSV in-place respetando comillas dobles, comas internas y \r\n.
  * Modifica la cadena 'line' insertando terminadores nulos ('\0').
- * Retorna el numero de campos extraidos (debe ser COL_COUNT), o -1 en caso de error.
+ * Exige exactamente once campos y comillas/delimitadores validos; admite vacios,
+ * comas y comillas escapadas, LF/CRLF. No admite campos multilinea.
+ * Retorna COL_COUNT, o -1/EINVAL (no usar el registro tras un error).
  */
 int parse_csv_line(char *line, CityRecord *record);
 
@@ -49,9 +51,14 @@ int parse_csv_line(char *line, CityRecord *record);
  * Realiza la busqueda secuencial streaming sobre el dataset en disco.
  * - 'path': ruta al archivo CSV (ej. "data/worldcities.csv").
  * - 'req': solicitud recibida con la operacion y el criterio buscado.
- * - 'emit': funcion callback que se invoca por cada coincidencia encontrada.
+ * - 'emit': callback para filas y mensajes de control del protocolo.
  * - 'ctx': contexto pasado al callback.
- * Retorna el total de coincidencias encontradas, o -1 en caso de error de archivo.
+ * Retorna coincidencias, o -1 por solicitud/CSV/archivo/emision invalida.
+ * Valida encabezado y cada fila; un error de datos/archivo emite ERROR terminal.
+ * Un callback negativo detiene toda emision inmediatamente; preserva su errno
+ * (EIO si no lo define). Incluso NOT_FOUND, END y ERROR comprueban el callback.
+ * Filas emitidas antes de ERROR son resultados parciales, no una consulta exitosa.
+ * Usa memoria proporcional a la mayor linea, sin cargar todo el dataset.
  */
 int search_dataset(const char *path, const Request *req, emit_response_fn emit, void *ctx);
 

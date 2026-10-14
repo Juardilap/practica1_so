@@ -1,299 +1,137 @@
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "dataset.h"
+#include "ipc_utils.h"
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <poll.h>
 #include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/file.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
+static volatile sig_atomic_t stop_requested;
+static void request_stop(int signo) { (void)signo; stop_requested = 1; }
 
-#include "protocol.h"
-#include "ipc_utils.h"
-#include "dataset.h"
+typedef struct {
+    const char *path;
+    dev_t device;
+    ino_t inode;
+    int verified;
+} OwnedFifo;
 
-
-// Funcion para permitir la busqueda de data_search() sin la necesida de conocer los detalles de la fifo
-
-
-static volatile sig_atomic_t stop_requested = 0;
-
-static void handle_signal(int signal_number)
-{
-    (void)signal_number;
-    stop_requested = 1;
-}
-
-
-
-static int cliente_desconectado = 0;
-
-static int fifo_emit_response(const Response *resp, void *ctx)
-{
-    int fd = *(int *)ctx;
-
-    if (cliente_desconectado) {
-        return -1;
-    }
-
-    if (write_full(fd, (void *)resp, sizeof(*resp))
-        != (ssize_t)sizeof(*resp)) {
-
-        if (errno == EPIPE) {
-            fprintf(stderr,
-                    "El cliente se desconectó durante la respuesta.\n");
-        } else {
-            perror("Error enviando respuesta por FIFO");
-        }
-
-        cliente_desconectado = 1;
-    return -1;
-        }
-
-        return 0;
-}
-
-
-
-static int create_fifo(const char *path, int *created)
-{
-
-    *created = 0;
-
-    if (mkfifo(path, 0660) == 0){
-        *created = 1;
-        printf("FIFO creada %s\n", path);
-        return 0;
-    }
-
-    if (errno != EEXIST) {
-        perror("mkfifo");
-        return -1;
-    }
-
-    /* Si ya existe, comprobar que sea una FIFO. */
+static int prepare_fifo(OwnedFifo *fifo) {
+    if (mkfifo(fifo->path, 0660) < 0 && errno != EEXIST) return -1;
     struct stat st;
-
-    if (lstat(path, &st) == -1) {
-        perror("lstat");
-        return -1;
-    }
-
-    if (!S_ISFIFO(st.st_mode)) {
-        fprintf(stderr, "%s existe, pero no es una FIFO\n", path);
-        errno = EINVAL;
-        return -1;
-    }
-
-    printf("Reutilizando FIFO existente: %s\n", path);
+    if (lstat(fifo->path, &st) < 0) return -1;
+    if (!S_ISFIFO(st.st_mode) || st.st_uid != geteuid()) { errno = EINVAL; return -1; }
+    fifo->device = st.st_dev;
+    fifo->inode = st.st_ino;
+    fifo->verified = 1;
     return 0;
 }
 
-
-int main(void)
-{
-    int fd_req = -1;
-    int fd_resp = -1;
-    int exit_status = EXIT_FAILURE;
-
-    int created_req = 0;
-    int created_resp = 0;
-
-    /* Evitar que una desconexión del cliente mate al servidor. */
-
-
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-
-    sa.sa_handler = handle_signal;
-    sigemptyset(&sa.sa_mask);
-
-    /* No usar SA_RESTART: queremos poder detectar interrupciones. */
-    sa.sa_flags = 0;
-
-    if (sigaction(SIGINT, &sa, NULL) == -1) {
-        perror("sigaction SIGINT");
-        return EXIT_FAILURE;
+static int verify_fd(int fd, const OwnedFifo *fifo) {
+    struct stat st;
+    if (fstat(fd, &st) < 0) return -1;
+    if (!S_ISFIFO(st.st_mode) || st.st_dev != fifo->device || st.st_ino != fifo->inode) {
+        errno = ESTALE;
+        return -1;
     }
-
-    if (sigaction(SIGTERM, &sa, NULL) == -1) {
-        perror("sigaction SIGTERM");
-        return EXIT_FAILURE;
-    }
-
-    /* SIGPIPE se ignora para detectar los errores de escritura. */
-    struct sigaction pipe_action;
-    memset(&pipe_action, 0, sizeof(pipe_action));
-
-    pipe_action.sa_handler = SIG_IGN;
-    sigemptyset(&pipe_action.sa_mask);
-
-    if (sigaction(SIGPIPE, &pipe_action, NULL) == -1) {
-        perror("sigaction SIGPIPE");
-        return EXIT_FAILURE;
-    }
-
-
-    if (create_fifo(FIFO_REQ, &created_req) == -1) {
-        goto cleanup;
-    }
-
-    if (create_fifo(FIFO_RESP, &created_resp) == -1) {
-        goto cleanup;
-    }
-
-        printf("Servidor FIFO: esperando cliente...\n");
-    fflush(stdout);
-
-    fd_req = open(FIFO_REQ, O_RDONLY);
-
-    if (fd_req == -1) {
-        if (stop_requested || errno == EINTR) {
-            fprintf(stderr,
-                    "\nTerminación solicitada; limpiando recursos...\n");
-            exit_status = EXIT_SUCCESS;
-        } else {
-            perror("open FIFO_REQ");
-        }
-        goto cleanup;
-    }
-
-    fd_resp = open(FIFO_RESP, O_WRONLY);
-
-    if (fd_resp == -1) {
-        if (stop_requested || errno == EINTR) {
-            fprintf(stderr,
-                    "\nTerminación solicitada; limpiando recursos...\n");
-            exit_status = EXIT_SUCCESS;
-        } else {
-            perror("open FIFO_RESP");
-        }
-        goto cleanup;
-    }
-
-    printf("Cliente conectado.\n");
-
-
-    for (;;) {
-        Request req = {0};
-
-        ssize_t n = read_full(fd_req, &req, sizeof(req));
-
-        if (stop_requested) {
-            fprintf(stderr, "\nTerminación solicitada; limpiando recursos...\n");
-            exit_status = EXIT_SUCCESS;
-            break;
-        }
-
-        if (n == 0) {
-            fprintf(stderr, "El cliente cerró la conexión.\n");
-            break;
-        }
-
-        if (n == -1) {
-            if (errno == EINTR) {
-                continue;
-            }
-
-            perror("read_full");
-            break;
-        }
-
-        /* Validar que la petición contenga una cadena terminada en '\0'. */
-        if (memchr(req.value, '\0', sizeof(req.value)) == NULL) {
-            Response error;
-            error.type = RESP_ERROR;
-            snprintf(error.text, sizeof(error.text),
-                     "La petición contiene un valor inválido.");
-
-            if (write_full(fd_resp, &error, sizeof(error)) < 0) {
-                perror("Error enviando respuesta");
-                break;
-            }
-
-            continue;
-        }
-
-        /* El cliente solicita terminar la comunicación. */
-        if (req.operation == OP_EXIT) {
-            Response bye = {0};
-            bye.type = RESP_BYE;
-
-            snprintf(bye.text, sizeof(bye.text),
-                     "Servidor finalizando.");
-
-            if (write_full(fd_resp, &bye, sizeof(bye)) !=
-                (ssize_t)sizeof(bye)) {
-                perror("Error enviando RESP_BYE");
-            break;
-                }
-
-                exit_status = EXIT_SUCCESS;
-                break;
-        }
-
-        /* Validar el tipo de búsqueda. */
-        if (req.operation != OP_CITY &&
-            req.operation != OP_COUNTRY &&
-            req.operation != OP_ISO2) {
-            Response error;
-        error.type = RESP_ERROR;
-        snprintf(error.text, sizeof(error.text),
-                 "Tipo de búsqueda desconocido.");
-
-        write_full(fd_resp, &error, sizeof(error));
-        continue;
-            }
-
-            cliente_desconectado = 0;
-            /* Buscar en el CSV y transmitir cada coincidencia por el FIFO. */
-
-            int resultados = search_dataset(
-                DATASET_DEFAULT_PATH,
-                &req,
-                fifo_emit_response,
-                &fd_resp
-            );
-
-            if (cliente_desconectado) {
-                fprintf(stderr, "Se perdió la conexión con el cliente.\n");
-                break;
-            }
-
-            if (resultados < 0) {
-                fprintf(stderr, "La búsqueda terminó con un error.\n");
-            }
-
-        printf("Petición procesada: %s\n", req.value);
-    }
-
-    cleanup:
-    if (fd_req != -1 && close(fd_req) == -1) {
-        perror("close FIFO_REQ");
-    }
-
-    if (fd_resp != -1 && close(fd_resp) == -1) {
-        perror("close FIFO_RESP");
-    }
-
-    /* Eliminar únicamente las FIFOs creadas por esta ejecución. */
-    if (created_req) {
-        if (unlink(FIFO_REQ) == -1 && errno != ENOENT) {
-            perror("unlink FIFO_REQ");
-            exit_status = EXIT_FAILURE;
-        }
-    }
-
-    if (created_resp) {
-        if (unlink(FIFO_RESP) == -1 && errno != ENOENT) {
-            perror("unlink FIFO_RESP");
-            exit_status = EXIT_FAILURE;
-        }
-    }
-
-    printf("Servidor FIFO finalizado.\n");
-
-    return exit_status;
+    return 0;
 }
 
+static int remove_fifo(const OwnedFifo *fifo) {
+    if (!fifo->verified) return 0;
+    struct stat st;
+    if (lstat(fifo->path, &st) < 0) return errno == ENOENT ? 0 : -1;
+    if (!S_ISFIFO(st.st_mode) || st.st_dev != fifo->device || st.st_ino != fifo->inode) {
+        fprintf(stderr, "No se elimina recurso reemplazado: %s\n", fifo->path);
+        errno = ESTALE;
+        return -1;
+    }
+    return unlink(fifo->path);
+}
+
+static int emit_fifo(const Response *response, void *ctx) {
+    int fd = *(int *)ctx;
+    return write_full_cancelable(fd, response, sizeof(*response), &stop_requested) < 0 ? -1 : 0;
+}
+
+static int close_checked(int fd) {
+    if (fd < 0) return 0;
+    /* On Linux close releases fd even on EINTR; retry could close a reused fd. */
+    if (close(fd) < 0) { perror("close"); return -1; }
+    return 0;
+}
+
+int main(void) {
+    int lock_fd = -1, req_fd = -1, resp_fd = -1, status = 1;
+    OwnedFifo request = { .path = FIFO_REQ }, response = { .path = FIFO_RESP };
+    struct sigaction action = {0};
+    if (sigemptyset(&action.sa_mask) < 0) { perror("sigemptyset"); return 1; }
+    action.sa_handler = request_stop;
+    if (sigaction(SIGINT, &action, NULL) < 0 || sigaction(SIGTERM, &action, NULL) < 0) {
+        perror("sigaction"); return 1;
+    }
+    action.sa_handler = SIG_IGN;
+    if (sigaction(SIGPIPE, &action, NULL) < 0) { perror("SIGPIPE"); return 1; }
+
+    /* Keep the lock inode after shutdown: unlinking it would permit two locks. */
+    lock_fd = open(FIFO_LOCK, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0660);
+    if (lock_fd < 0) { perror("open lock"); goto cleanup; }
+    struct stat lock_stat;
+    if (fstat(lock_fd, &lock_stat) < 0) { perror("fstat lock"); goto cleanup; }
+    if (!S_ISREG(lock_stat.st_mode) || lock_stat.st_uid != geteuid()) {
+        fprintf(stderr, "Archivo de bloqueo no valido.\n"); goto cleanup;
+    }
+    if (flock(lock_fd, LOCK_EX | LOCK_NB) < 0) {
+        perror("Sesion FIFO ocupada: flock"); goto cleanup;
+    }
+    if (stop_requested) { status = 0; goto cleanup; }
+    if (prepare_fifo(&request) < 0 || prepare_fifo(&response) < 0) {
+        perror("crear/verificar FIFO"); goto cleanup;
+    }
+    /* Same connection order as the client. Nonblocking opens + ppoll make
+     * startup cancellable without a signal/check/open race. */
+    req_fd = open(FIFO_REQ, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+    if (req_fd < 0 || verify_fd(req_fd, &request) < 0) { perror("open FIFO_REQ"); goto cleanup; }
+    for (;;) {
+        if (stop_requested) { status = 0; goto cleanup; }
+        resp_fd = open(FIFO_RESP, O_WRONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+        if (resp_fd >= 0) break;
+        if (errno != ENXIO && errno != EINTR) { perror("open FIFO_RESP"); goto cleanup; }
+        if (ipc_wait_cancelable(-1, 0, 50, &stop_requested) < 0) goto io_error;
+    }
+    if (verify_fd(resp_fd, &response) < 0) { perror("verificar FIFO_RESP"); goto cleanup; }
+
+    while (!stop_requested) {
+        Request req;
+        ssize_t n = read_full_cancelable(req_fd, &req, sizeof(req), &stop_requested);
+        if (n < 0) goto io_error;
+        if (!n) { fprintf(stderr, "Cliente desconectado sin OP_EXIT.\n"); goto cleanup; }
+        if (stop_requested) break;
+        if (req.operation == OP_EXIT) {
+            Response bye = { .type = RESP_BYE, .text = "Sesion finalizada." };
+            if (emit_fifo(&bye, &resp_fd) < 0) goto io_error;
+            status = 0;
+            goto cleanup;
+        }
+        /* Invalid requests and dataset errors are terminal for this session. */
+        if (search_dataset(DATASET_DEFAULT_PATH, &req, emit_fifo, &resp_fd) < 0)
+            goto io_error;
+    }
+    status = 0;
+    goto cleanup;
+io_error:
+    if (errno == ECANCELED || stop_requested) status = 0;
+    else if (errno == EPIPE) fprintf(stderr, "Cliente desconectado al enviar respuesta.\n");
+    else perror("Sesion FIFO");
+cleanup:
+    if (close_checked(resp_fd) < 0) status = 1;
+    if (close_checked(req_fd) < 0) status = 1;
+    if (remove_fifo(&response) < 0) { perror("limpiar FIFO_RESP"); status = 1; }
+    if (remove_fifo(&request) < 0) { perror("limpiar FIFO_REQ"); status = 1; }
+    if (close_checked(lock_fd) < 0) status = 1;
+    return status;
+}

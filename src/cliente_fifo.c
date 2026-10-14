@@ -1,258 +1,131 @@
-
+#include "ipc_utils.h"
+#include "protocol.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <signal.h>
-#include <poll.h>
 
-#include "protocol.h"
-#include "ipc_utils.h"
+typedef struct {
+    char data[4096];
+    size_t next, end;
+    int eof;
+} Input;
 
-static int read_line(const char *prompt, char *buffer, size_t size)
-{
-    printf("%s", prompt);
-    fflush(stdout);
-
-    if (fgets(buffer, (int)size, stdin) == NULL)
-        return 0;
-
-    char *newline = strchr(buffer, '\n');
-
-    if (newline != NULL) {
-        *newline = '\0';
-        return 1;
-    }
-
-    /* La línea podría exceder el buffer: descartar lo restante. */
-    int ch;
-
-    while ((ch = getchar()) != '\n' && ch != EOF)
-        ;
-
-    fprintf(stderr, "Entrada demasiado larga.\n");
-    return -1;
-}
-
-static int receive_responses(int fd_resp)
-{
+/* 1=line, 0=EOF, -1=discarded invalid/oversize line, -2=I/O error.
+ * Both prompts share this buffer; no stdio input buffering is involved. */
+static int read_line(Input *input, int response_fd, char *line, size_t size) {
+    size_t used = 0;
+    int invalid = 0;
     for (;;) {
-        Response resp = {0};
-
-        ssize_t n = read_full(fd_resp, &resp, sizeof(resp));
-
-        if (n == 0) {
-            fprintf(stderr, "El servidor cerró la conexión.\n");
-            return -1;
-        }
-
-        if (n == -1) {
-            perror("read_full");
-            return -1;
-        }
-
-        /* Validar que el texto tenga terminador nulo. */
-        if (memchr(resp.text, '\0', sizeof(resp.text)) == NULL) {
-            fprintf(stderr, "Respuesta con texto inválido.\n");
-            return -1;
-        }
-
-        switch (resp.type) {
-            case RESP_ROW:
-                printf("%s\n", resp.text);
-                break;
-
-            case RESP_NOT_FOUND:
-                printf("%s\n", resp.text);
-                /* La búsqueda aún puede enviar RESP_END. */
-                break;
-
-            case RESP_END:
-                printf("%s\n", resp.text);
-                return 0;
-
-            case RESP_ERROR:
-                fprintf(stderr, "%s\n", resp.text);
-                /* Puede ser un error sin RESP_END. */
-                return 0;
-
-            case RESP_BYE:
-                printf("%s\n", resp.text);
-                return 1;
-
-            default:
-                fprintf(stderr, "Tipo de respuesta desconocido: %d\n",
-                        (int)resp.type);
-                return -1;
-        }
-    }
-}
-static int esperar_entrada(int fd_resp)
-{
-    struct pollfd fds[2];
-
-    fds[0].fd = STDIN_FILENO;
-    fds[0].events = POLLIN;
-
-    fds[1].fd = fd_resp;
-    fds[1].events = POLLIN;
-
-    for (;;) {
-        int resultado = poll(fds, 2, -1);
-
-        if (resultado == -1) {
-            if (errno == EINTR) {
-                continue;
+        if (input->next == input->end) {
+            if (input->eof) {
+                line[used] = '\0';
+                return invalid ? -1 : used ? 1 : 0;
             }
-
-            perror("poll");
-            return -1;
+            struct pollfd fds[2] = {
+                { .fd = STDIN_FILENO, .events = POLLIN },
+                { .fd = response_fd, .events = POLLIN }
+            };
+            int ready;
+            do { ready = poll(fds, 2, -1); } while (ready < 0 && errno == EINTR);
+            if (ready < 0) return -2;
+            if (fds[1].revents) { errno = EPIPE; return -2; }
+            if (fds[0].revents & (POLLERR | POLLNVAL)) { errno = EIO; return -2; }
+            ssize_t n;
+            do { n = read(STDIN_FILENO, input->data, sizeof(input->data)); }
+            while (n < 0 && errno == EINTR);
+            if (n < 0) return -2;
+            input->next = 0;
+            input->end = (size_t)n;
+            input->eof = (n == 0);
+            continue;
         }
-
-        /* El servidor cerró su extremo de la FIFO. */
-        if (fds[1].revents & (POLLHUP | POLLERR | POLLNVAL)) {
-            fprintf(stderr, "\nEl servidor se desconectó.\n");
-            return -1;
+        char c = input->data[input->next++];
+        if (c == '\n') {
+            if (used && line[used - 1] == '\r') --used;
+            line[used] = '\0';
+            return invalid ? -1 : 1;
         }
-
-        /* La entrada del teclado está disponible. */
-        if (fds[0].revents & POLLIN) {
-            return 0;
-        }
-
-        if (fds[0].revents & (POLLHUP | POLLERR | POLLNVAL)) {
-            fprintf(stderr, "\nLa entrada estándar se cerró.\n");
-            return -1;
-        }
+        if (!c || used == size - 1) invalid = 1;
+        if (!invalid) line[used++] = c;
     }
 }
 
-
-int main(void)
-{
-    int fd_req = -1;
-    int fd_resp = -1;
-    int exit_status = EXIT_FAILURE;
-
-    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
-        perror("signal");
-        return EXIT_FAILURE;
-    }
-
-    printf("Cliente FIFO: conectando...\n");
-
-    fd_req = open(FIFO_REQ, O_WRONLY);
-    if (fd_req == -1) {
-        perror("open FIFO_REQ");
-        goto cleanup;
-    }
-
-    fd_resp = open(FIFO_RESP, O_RDONLY);
-    if (fd_resp == -1) {
-        perror("open FIFO_RESP");
-        goto cleanup;
-    }
-
-    printf("Conectado al servidor.\n");
-
+static int receive_responses(int fd, int exiting) {
     for (;;) {
-        char input[256];
-
-
-
-        printf("\n========== WORLD CITIES ==========\n");
-        printf("1. Buscar ciudad\n");
-        printf("2. Buscar país\n");
-        printf("3. Buscar código ISO2\n");
-        printf("4. Salir\n");
-
-        if (esperar_entrada(fd_resp) == -1) {
-            break;
+        Response response;
+        ssize_t n = read_full(fd, &response, sizeof(response));
+        if (n <= 0) {
+            if (!n) errno = EPIPE;
+            perror("recibir respuesta"); return -1;
         }
-
-        int result = read_line("Seleccione una opción: ",
-                               input, sizeof(input));
-
-        if (result == 0) {
-            fprintf(stderr, "Fin de la entrada estándar.\n");
-            break;
+        if (!memchr(response.text, '\0', sizeof(response.text))) {
+            fprintf(stderr, "Respuesta sin terminador.\n"); return -1;
         }
-
-        if (result == -1)
-            continue;
-
-        Request req = {0};
-
-        if (strcmp(input, "1") == 0) {
-            req.operation = OP_CITY;
-        } else if (strcmp(input, "2") == 0) {
-            req.operation = OP_COUNTRY;
-        } else if (strcmp(input, "3") == 0) {
-            req.operation = OP_ISO2;
-        } else if (strcmp(input, "4") == 0) {
-            req.operation = OP_EXIT;
+        if (response.type == RESP_ERROR) {
+            fprintf(stderr, "%s\n", response.text); return -1;
+        }
+        if (exiting) {
+            if (response.type == RESP_BYE) { puts(response.text); return 0; }
         } else {
-            printf("Opción inválida.\n");
-            continue;
-        }
-
-        if (req.operation != OP_EXIT) {
-            result = read_line("Ingrese el término de búsqueda: ",
-                               input, sizeof(input));
-
-            if (result == 0)
-                break;
-
-            if (result == -1)
-                continue;
-
-            if (input[0] == '\0') {
-                printf("La búsqueda no puede estar vacía.\n");
-                continue;
+            if (response.type == RESP_ROW || response.type == RESP_NOT_FOUND) {
+                puts(response.text); continue;
             }
-
-            if (strlen(input) >= sizeof(req.value)) {
-                fprintf(stderr, "El término es demasiado largo.\n");
-                continue;
-            }
-
-            memcpy(req.value, input, strlen(input) + 1);
+            if (response.type == RESP_END) { puts(response.text); return 0; }
         }
-
-        if (write_full(fd_req, &req, sizeof(req)) !=
-            (ssize_t)sizeof(req)) {
-            perror("write_full");
-        break;
-            }
-
-            int response_status = receive_responses(fd_resp);
-
-            if (response_status == -1)
-                break;
-
-        if (req.operation == OP_EXIT) {
-            if (response_status == 1)
-                exit_status = EXIT_SUCCESS;
-
-            break;
-        }
-
-        if (response_status == 1) {
-            fprintf(stderr, "El servidor terminó la sesión.\n");
-            break;
-        }
+        fprintf(stderr, "Tipo de respuesta inesperado: %d\n", response.type);
+        return -1;
     }
+}
 
-    cleanup:
-    if (fd_req != -1 && close(fd_req) == -1)
-        perror("close FIFO_REQ");
-
-    if (fd_resp != -1 && close(fd_resp) == -1)
-        perror("close FIFO_RESP");
-
-    printf("Cliente finalizado.\n");
-
-    return exit_status;
+int main(void) {
+    struct sigaction action = { .sa_handler = SIG_IGN };
+    if (sigemptyset(&action.sa_mask) < 0 || sigaction(SIGPIPE, &action, NULL) < 0) {
+        perror("SIGPIPE"); return 1;
+    }
+    int status = 1;
+    int req_fd = open(FIFO_REQ, O_WRONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (req_fd < 0) { perror("open FIFO_REQ"); return 1; }
+    int resp_fd = open(FIFO_RESP, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (resp_fd < 0) { perror("open FIFO_RESP"); goto cleanup; }
+    Input input = {0};
+    for (;;) {
+        Request request = {0};
+        char choice[32];
+        printf("\n1. Buscar ciudad\n2. Buscar pais\n3. Buscar ISO2\n4. Salir\nOpcion: ");
+        fflush(stdout);
+        int result = read_line(&input, resp_fd, choice, sizeof(choice));
+        if (result == -2) { perror("entrada/conexion"); break; }
+        if (result == -1) { fprintf(stderr, "Entrada demasiado larga o invalida.\n"); continue; }
+        if (!result) request.operation = OP_EXIT;
+        else {
+            char *end;
+            errno = 0;
+            long operation = strtol(choice, &end, 10);
+            while (*end == ' ' || *end == '\t' || *end == '\r') ++end;
+            if (errno || end == choice || *end || operation < OP_CITY || operation > OP_EXIT) {
+                fprintf(stderr, "Opcion invalida.\n"); continue;
+            }
+            request.operation = (int)operation;
+        }
+        if (request.operation != OP_EXIT) {
+            printf("Valor de busqueda: ");
+            fflush(stdout);
+            result = read_line(&input, resp_fd, request.value, sizeof(request.value));
+            if (result == -2) { perror("entrada/conexion"); break; }
+            if (result == -1) { fprintf(stderr, "Entrada demasiado larga o invalida.\n"); continue; }
+            if (!result) request.operation = OP_EXIT;
+        }
+        if (write_full(req_fd, &request, sizeof(request)) < 0) { perror("enviar solicitud"); break; }
+        if (receive_responses(resp_fd, request.operation == OP_EXIT) < 0) break;
+        if (request.operation == OP_EXIT) { status = 0; break; }
+    }
+cleanup:
+    if (resp_fd >= 0 && close(resp_fd) < 0) { perror("close FIFO_RESP"); status = 1; }
+    if (close(req_fd) < 0) { perror("close FIFO_REQ"); status = 1; }
+    return status;
 }

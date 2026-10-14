@@ -11,8 +11,15 @@
 #define VALUE_SIZE 128
 #define TEXT_SIZE  512
 
+#ifndef FIFO_REQ
 #define FIFO_REQ   "/tmp/so_p1_req.fifo"
+#endif
+#ifndef FIFO_RESP
 #define FIFO_RESP  "/tmp/so_p1_resp.fifo"
+#endif
+#ifndef FIFO_LOCK
+#define FIFO_LOCK  "/tmp/so_p1_fifo.lock"
+#endif
 #define SHM_KEY    0x503141
 
 /* =========================================================================
@@ -27,6 +34,9 @@ typedef enum {
 
 /* =========================================================================
  * Tipos de respuesta emitidos por el servidor
+ * Contrato: ROW+ -> END; NOT_FOUND -> END; ERROR terminal (sin END);
+ * OP_EXIT -> BYE. Tras ERROR se cierra la sesion. NOT_FOUND no es terminal.
+ * Las estructuras/codigos se conservan para FIFO y la futura version SHM.
  * ========================================================================= */
 typedef enum {
     RESP_ROW = 1,       /* Fila coincidente formateada */
