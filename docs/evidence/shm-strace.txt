@@ -1,0 +1,21 @@
+17:44:22.148395 shmget(0x71f9ccfc, 808, IPC_CREAT|IPC_EXCL|0660) = 65584
+17:44:22.148692 shmat(65584, NULL, 0)   = 0x726b2170d000
+17:44:22.150944 futex(0x726b2170d000, FUTEX_WAIT_BITSET, 0, {tv_sec=280621, tv_nsec=312153761}, FUTEX_BITSET_MATCH_ANY) = -1 ETIMEDOUT (Connection timed out)
+17:44:22.352965 pidfd_open(6778, 0)     = 3
+17:44:22.354643 poll([{fd=3, events=POLLIN}], 1, 0) = 0 (Timeout)
+17:44:22.354998 poll([{fd=3, events=POLLIN}], 1, 0) = 0 (Timeout)
+17:44:22.355353 shmctl(65584, IPC_STAT, {shm_perm={uid=1001, gid=1001, mode=0660, key=1912196348, cuid=1001, cgid=1001}, shm_segsz=808, shm_cpid=6769, shm_lpid=6778, shm_nattch=2, shm_atime=1792017862, shm_dtime=0, shm_ctime=1792017862}) = 0
+17:44:22.355694 futex(0x726b2170d000, FUTEX_WAIT_BITSET, 0, {tv_sec=280621, tv_nsec=516886376}, FUTEX_BITSET_MATCH_ANY) = 0
+17:44:22.531649 poll([{fd=3, events=POLLIN}], 1, 0) = 0 (Timeout)
+17:44:22.531994 shmctl(65584, IPC_STAT, {shm_perm={uid=1001, gid=1001, mode=0660, key=1912196348, cuid=1001, cgid=1001}, shm_segsz=808, shm_cpid=6769, shm_lpid=6778, shm_nattch=2, shm_atime=1792017862, shm_dtime=0, shm_ctime=1792017862}) = 0
+17:44:22.532338 futex(0x726b2170d020, FUTEX_WAKE, 1) = 1
+17:44:22.710564 poll([{fd=3, events=POLLIN}], 1, 0) = 0 (Timeout)
+17:44:22.710731 shmctl(65584, IPC_STAT, {shm_perm={uid=1001, gid=1001, mode=0660, key=1912196348, cuid=1001, cgid=1001}, shm_segsz=808, shm_cpid=6769, shm_lpid=6778, shm_nattch=2, shm_atime=1792017862, shm_dtime=0, shm_ctime=1792017862}) = 0
+17:44:22.710902 futex(0x726b2170d020, FUTEX_WAKE, 1) = 1
+17:44:22.711186 poll([{fd=3, events=POLLIN}], 1, 0) = 0 (Timeout)
+17:44:22.711491 shmctl(65584, IPC_STAT, {shm_perm={uid=1001, gid=1001, mode=0660, key=1912196348, cuid=1001, cgid=1001}, shm_segsz=808, shm_cpid=6769, shm_lpid=6778, shm_nattch=2, shm_atime=1792017862, shm_dtime=0, shm_ctime=1792017862}) = 0
+17:44:22.711912 futex(0x726b2170d000, FUTEX_WAIT_BITSET, 0, {tv_sec=280621, tv_nsec=873098740}, FUTEX_BITSET_MATCH_ANY) = -1 ETIMEDOUT (Connection timed out)
+17:44:22.912450 poll([{fd=3, events=POLLIN}], 1, 0) = 0 (Timeout)
+17:44:22.912725 shmctl(65584, IPC_STAT, {shm_perm={uid=1001, gid=1001, mode=0660, key=1912196348, cuid=1001, cgid=1001}, shm_segsz=808, shm_cpid=6769, shm_lpid=6778, shm_nattch=2, shm_atime=1792017862, shm_dtime=0, shm_ctime=1792017862}) = 0
+17:44:22.913088 futex(0x726b2170d000, FUTEX_WAIT_BITSET, 0, {tv_sec=280622, tv_nsec=74253884}, FUTEX_BITSET_MATCH_ANY) = ?
+17:44:22.939311 +++ killed by SIGKILL +++

@@ -1,0 +1,1039 @@
+UTC: 2026-10-14T22:44:21.000039+00:00
+Source commit: f5156c2db2fbd6b478580fde5553f87e1938f806
+Private test binaries: same sources, FIFO paths relative to temporary cwd; SHM_TEST_BUILD key from SO_TEST_SHM_KEY, SHM_CLIENT_LOCK="shm-client.lock".
+Dataset SHA256: 0af40631e4cfb93d5bd1d980e3dc6d38503ae6495375179e5d9a87fb9840b6a1
+$ uname -a
+Linux DESKTOP-VEBQCHO 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+[exit 0]
+$ gcc --version
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+[exit 0]
+$ ldd --version
+ldd (Ubuntu GLIBC 2.39-0ubuntu8.9) 2.39
+Copyright (C) 2024 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+Written by Roland McGrath and Ulrich Drepper.
+
+[exit 0]
+
+=== FIFO cwd=/tmp/so-evidence-fifo-rt768iia ===
+$ strace -tt -s 96 -o /tmp/so-final-i8p3a5a5/evidence/fifo-strace.txt -e trace=openat,read,write,ppoll,rt_sigprocmask,close,unlink,flock /tmp/so-final-i8p3a5a5/bin/servidor_fifo_test
+strace PID=6732; server PID=6735
+--- Before connecting ---
+$ python3 /tmp/so-final-i8p3a5a5/scripts/observe.py --server-pid 6735
+Kernel: Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
+$ ps -o pid,ppid,stat,wchan,cmd -p 6735
+    PID    PPID STAT WCHAN  CMD
+   6735    6732 S+   poll_s /tmp/so-final-i8p3a5a5/bin/servidor_fifo_test
+$ cat /proc/6735/status
+Name:	servidor_fifo_t
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6735
+Ngid:	0
+Pid:	6735
+PPid:	6732
+TracerPid:	6732
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6735
+NSpid:	6735
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2584 kB
+VmSize:	    2564 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1284 kB
+VmRSS:	    1284 kB
+RssAnon:	      88 kB
+RssFile:	    1196 kB
+RssShmem:	       0 kB
+VmData:	      92 kB
+VmStk:	     132 kB
+VmExe:	       8 kB
+VmLib:	    1752 kB
+VmPTE:	      40 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000004002
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	126
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6735/wchan
+poll_schedule_timeout.constprop.0
+$ ls -l /proc/6735/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[716416]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> /tmp/so-evidence-fifo-rt768iia/server.lock
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 4 -> /tmp/so-evidence-fifo-rt768iia/request.fifo
+$ lsof -p 6735
+COMMAND    PID     USER   FD   TYPE DEVICE SIZE/OFF   NODE NAME
+servidor_ 6735 asus_rog  cwd    DIR   8,80     4096  38465 /tmp/so-evidence-fifo-rt768iia
+servidor_ 6735 asus_rog  rtd    DIR   8,80     4096      2 /
+servidor_ 6735 asus_rog  txt    REG   8,80    53728  38588 /tmp/so-final-i8p3a5a5/bin/servidor_fifo_test
+servidor_ 6735 asus_rog  mem    REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+servidor_ 6735 asus_rog  mem    REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+servidor_ 6735 asus_rog    0r  FIFO   0,15      0t0 716416 pipe
+servidor_ 6735 asus_rog    1w   REG   8,80        0  38593 /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+servidor_ 6735 asus_rog    2w   REG   8,80        0  38593 /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+servidor_ 6735 asus_rog    3uW  REG   8,80        0  38597 /tmp/so-evidence-fifo-rt768iia/server.lock
+servidor_ 6735 asus_rog    4r  FIFO   8,80      0t0  38606 /tmp/so-evidence-fifo-rt768iia/request.fifo
+$ ipcs -m
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+
+
+[exit 0]
+$ /tmp/so-final-i8p3a5a5/bin/cliente_fifo_test
+client PID=6743
+
+1. Buscar ciudad
+2. Buscar pais
+3. Buscar ISO2
+4. Salir
+Opcion: 
+--- Connected, waiting for input ---
+$ python3 /tmp/so-final-i8p3a5a5/scripts/observe.py --server-pid 6735 --client-pid 6743
+Kernel: Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
+$ ps -o pid,ppid,stat,wchan,cmd -p 6735
+    PID    PPID STAT WCHAN  CMD
+   6735    6732 S+   poll_s /tmp/so-final-i8p3a5a5/bin/servidor_fifo_test
+$ cat /proc/6735/status
+Name:	servidor_fifo_t
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6735
+Ngid:	0
+Pid:	6735
+PPid:	6732
+TracerPid:	6732
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6735
+NSpid:	6735
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2584 kB
+VmSize:	    2564 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1284 kB
+VmRSS:	    1284 kB
+RssAnon:	      88 kB
+RssFile:	    1196 kB
+RssShmem:	       0 kB
+VmData:	      92 kB
+VmStk:	     132 kB
+VmExe:	       8 kB
+VmLib:	    1752 kB
+VmPTE:	      40 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000004002
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	164
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6735/wchan
+poll_schedule_timeout.constprop.0
+$ ls -l /proc/6735/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[716416]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> /tmp/so-evidence-fifo-rt768iia/server.lock
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 4 -> /tmp/so-evidence-fifo-rt768iia/request.fifo
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 5 -> /tmp/so-evidence-fifo-rt768iia/response.fifo
+$ lsof -p 6735
+COMMAND    PID     USER   FD   TYPE DEVICE SIZE/OFF   NODE NAME
+servidor_ 6735 asus_rog  cwd    DIR   8,80     4096  38465 /tmp/so-evidence-fifo-rt768iia
+servidor_ 6735 asus_rog  rtd    DIR   8,80     4096      2 /
+servidor_ 6735 asus_rog  txt    REG   8,80    53728  38588 /tmp/so-final-i8p3a5a5/bin/servidor_fifo_test
+servidor_ 6735 asus_rog  mem    REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+servidor_ 6735 asus_rog  mem    REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+servidor_ 6735 asus_rog    0r  FIFO   0,15      0t0 716416 pipe
+servidor_ 6735 asus_rog    1w   REG   8,80        0  38593 /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+servidor_ 6735 asus_rog    2w   REG   8,80        0  38593 /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+servidor_ 6735 asus_rog    3uW  REG   8,80        0  38597 /tmp/so-evidence-fifo-rt768iia/server.lock
+servidor_ 6735 asus_rog    4r  FIFO   8,80      0t0  38606 /tmp/so-evidence-fifo-rt768iia/request.fifo
+servidor_ 6735 asus_rog    5w  FIFO   8,80      0t0  38607 /tmp/so-evidence-fifo-rt768iia/response.fifo
+$ ps -o pid,ppid,stat,wchan,cmd -p 6743
+    PID    PPID STAT WCHAN  CMD
+   6743    6728 S+   poll_s /tmp/so-final-i8p3a5a5/bin/cliente_fifo_test
+$ cat /proc/6743/status
+Name:	cliente_fifo_te
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6743
+Ngid:	0
+Pid:	6743
+PPid:	6728
+TracerPid:	0
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6743
+NSpid:	6743
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2692 kB
+VmSize:	    2692 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1360 kB
+VmRSS:	    1360 kB
+RssAnon:	     104 kB
+RssFile:	    1256 kB
+RssShmem:	       0 kB
+VmData:	     224 kB
+VmStk:	     132 kB
+VmExe:	       4 kB
+VmLib:	    1752 kB
+VmPTE:	      48 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000000000
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	2
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6743/wchan
+poll_schedule_timeout.constprop.0
+$ ls -l /proc/6743/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[715706]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> pipe:[715707]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> pipe:[715708]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> /tmp/so-evidence-fifo-rt768iia/request.fifo
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 4 -> /tmp/so-evidence-fifo-rt768iia/response.fifo
+$ lsof -p 6743
+COMMAND    PID     USER   FD   TYPE DEVICE SIZE/OFF   NODE NAME
+cliente_f 6743 asus_rog  cwd    DIR   8,80     4096  38465 /tmp/so-evidence-fifo-rt768iia
+cliente_f 6743 asus_rog  rtd    DIR   8,80     4096      2 /
+cliente_f 6743 asus_rog  txt    REG   8,80    38584  38589 /tmp/so-final-i8p3a5a5/bin/cliente_fifo_test
+cliente_f 6743 asus_rog  mem    REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+cliente_f 6743 asus_rog  mem    REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+cliente_f 6743 asus_rog    0r  FIFO   0,15      0t0 715706 pipe
+cliente_f 6743 asus_rog    1w  FIFO   0,15      0t0 715707 pipe
+cliente_f 6743 asus_rog    2w  FIFO   0,15      0t0 715708 pipe
+cliente_f 6743 asus_rog    3w  FIFO   8,80      0t0  38606 /tmp/so-evidence-fifo-rt768iia/request.fifo
+cliente_f 6743 asus_rog    4r  FIFO   8,80      0t0  38607 /tmp/so-evidence-fifo-rt768iia/response.fifo
+$ ipcs -m
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+
+
+[exit 0]
+stdin -> 1\nTokyo\n
+Valor de busqueda: Ciudad: Tokyo                | Pais: Japan           | ISO2: JP | Region: Tōkyō              | Poblacion: 37732000
+Busqueda finalizada. Total coincidencias encontradas: 1
+
+1. Buscar ciudad
+2. Buscar pais
+3. Buscar ISO2
+4. Salir
+Opcion: 
+--- After Tokyo ---
+$ python3 /tmp/so-final-i8p3a5a5/scripts/observe.py --server-pid 6735 --client-pid 6743
+Kernel: Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
+$ ps -o pid,ppid,stat,wchan,cmd -p 6735
+    PID    PPID STAT WCHAN  CMD
+   6735    6732 S+   poll_s /tmp/so-final-i8p3a5a5/bin/servidor_fifo_test
+$ cat /proc/6735/status
+Name:	servidor_fifo_t
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6735
+Ngid:	0
+Pid:	6735
+PPid:	6732
+TracerPid:	6732
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6735
+NSpid:	6735
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2696 kB
+VmSize:	    2696 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1676 kB
+VmRSS:	    1676 kB
+RssAnon:	     100 kB
+RssFile:	    1576 kB
+RssShmem:	       0 kB
+VmData:	     224 kB
+VmStk:	     132 kB
+VmExe:	       8 kB
+VmLib:	    1752 kB
+VmPTE:	      44 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000004002
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	2495
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6735/wchan
+poll_schedule_timeout.constprop.0
+$ ls -l /proc/6735/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[716416]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> /tmp/so-evidence-fifo-rt768iia/server.lock
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 4 -> /tmp/so-evidence-fifo-rt768iia/request.fifo
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 5 -> /tmp/so-evidence-fifo-rt768iia/response.fifo
+$ lsof -p 6735
+COMMAND    PID     USER   FD   TYPE DEVICE SIZE/OFF   NODE NAME
+servidor_ 6735 asus_rog  cwd    DIR   8,80     4096  38465 /tmp/so-evidence-fifo-rt768iia
+servidor_ 6735 asus_rog  rtd    DIR   8,80     4096      2 /
+servidor_ 6735 asus_rog  txt    REG   8,80    53728  38588 /tmp/so-final-i8p3a5a5/bin/servidor_fifo_test
+servidor_ 6735 asus_rog  mem    REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+servidor_ 6735 asus_rog  mem    REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+servidor_ 6735 asus_rog    0r  FIFO   0,15      0t0 716416 pipe
+servidor_ 6735 asus_rog    1w   REG   8,80        0  38593 /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+servidor_ 6735 asus_rog    2w   REG   8,80        0  38593 /tmp/so-final-i8p3a5a5/evidence/fifo-server.txt
+servidor_ 6735 asus_rog    3uW  REG   8,80        0  38597 /tmp/so-evidence-fifo-rt768iia/server.lock
+servidor_ 6735 asus_rog    4r  FIFO   8,80      0t0  38606 /tmp/so-evidence-fifo-rt768iia/request.fifo
+servidor_ 6735 asus_rog    5w  FIFO   8,80      0t0  38607 /tmp/so-evidence-fifo-rt768iia/response.fifo
+$ ps -o pid,ppid,stat,wchan,cmd -p 6743
+    PID    PPID STAT WCHAN  CMD
+   6743    6728 S+   poll_s /tmp/so-final-i8p3a5a5/bin/cliente_fifo_test
+$ cat /proc/6743/status
+Name:	cliente_fifo_te
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6743
+Ngid:	0
+Pid:	6743
+PPid:	6728
+TracerPid:	0
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6743
+NSpid:	6743
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2692 kB
+VmSize:	    2692 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1488 kB
+VmRSS:	    1488 kB
+RssAnon:	     104 kB
+RssFile:	    1384 kB
+RssShmem:	       0 kB
+VmData:	     224 kB
+VmStk:	     132 kB
+VmExe:	       4 kB
+VmLib:	    1752 kB
+VmPTE:	      48 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000000000
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	5
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6743/wchan
+poll_schedule_timeout.constprop.0
+$ ls -l /proc/6743/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[715706]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> pipe:[715707]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> pipe:[715708]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> /tmp/so-evidence-fifo-rt768iia/request.fifo
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 4 -> /tmp/so-evidence-fifo-rt768iia/response.fifo
+$ lsof -p 6743
+COMMAND    PID     USER   FD   TYPE DEVICE SIZE/OFF   NODE NAME
+cliente_f 6743 asus_rog  cwd    DIR   8,80     4096  38465 /tmp/so-evidence-fifo-rt768iia
+cliente_f 6743 asus_rog  rtd    DIR   8,80     4096      2 /
+cliente_f 6743 asus_rog  txt    REG   8,80    38584  38589 /tmp/so-final-i8p3a5a5/bin/cliente_fifo_test
+cliente_f 6743 asus_rog  mem    REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+cliente_f 6743 asus_rog  mem    REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+cliente_f 6743 asus_rog    0r  FIFO   0,15      0t0 715706 pipe
+cliente_f 6743 asus_rog    1w  FIFO   0,15      0t0 715707 pipe
+cliente_f 6743 asus_rog    2w  FIFO   0,15      0t0 715708 pipe
+cliente_f 6743 asus_rog    3w  FIFO   8,80      0t0  38606 /tmp/so-evidence-fifo-rt768iia/request.fifo
+cliente_f 6743 asus_rog    4r  FIFO   8,80      0t0  38607 /tmp/so-evidence-fifo-rt768iia/response.fifo
+$ ipcs -m
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+
+
+[exit 0]
+stdin -> 4\n
+Sesion finalizada.
+
+
+client exit=0; server/strace exit=0
+FIFO existence after exit: [('request.fifo', False), ('response.fifo', False)]
+SO_TEST_SHM_KEY=1912196348 (0x71f9ccfc)
+
+=== SHM cwd=/tmp/so-evidence-shm-ijlixhwj ===
+$ strace -tt -s 96 -o /tmp/so-final-i8p3a5a5/evidence/shm-strace.txt -e trace=shmget,shmat,shmdt,shmctl,futex,pidfd_open,poll /tmp/so-final-i8p3a5a5/bin/servidor_shm_test
+strace PID=6766; server PID=6769
+$ ipcs -m -i 65584
+
+Shared memory Segment shmid=65584
+uid=1001	gid=1001	cuid=1001	cgid=1001
+mode=0660	access_perms=0660
+bytes=808	lpid=6769	cpid=6769	nattch=1
+att_time=Wed Oct 14 17:44:22 2026  
+det_time=Not set                   
+change_time=Wed Oct 14 17:44:22 2026  
+
+
+[exit 0]
+--- Before connecting ---
+$ python3 /tmp/so-final-i8p3a5a5/scripts/observe.py --server-pid 6769
+Kernel: Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
+$ ps -o pid,ppid,stat,wchan,cmd -p 6769
+    PID    PPID STAT WCHAN  CMD
+   6769    6766 S+   futex_ /tmp/so-final-i8p3a5a5/bin/servidor_shm_test
+$ cat /proc/6769/status
+Name:	servidor_shm_te
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6769
+Ngid:	0
+Pid:	6769
+PPid:	6766
+TracerPid:	6766
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6769
+NSpid:	6769
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2708 kB
+VmSize:	    2708 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1816 kB
+VmRSS:	    1816 kB
+RssAnon:	     100 kB
+RssFile:	    1712 kB
+RssShmem:	       4 kB
+VmData:	     224 kB
+VmStk:	     132 kB
+VmExe:	      12 kB
+VmLib:	    1752 kB
+VmPTE:	      48 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000004002
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	97
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6769/wchan
+futex_do_wait
+$ ls -l /proc/6769/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[716416]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+$ lsof -p 6769
+COMMAND    PID     USER   FD   TYPE DEVICE SIZE/OFF   NODE NAME
+servidor_ 6769 asus_rog  cwd    DIR   8,80     4096  38465 /tmp/so-evidence-shm-ijlixhwj
+servidor_ 6769 asus_rog  rtd    DIR   8,80     4096      2 /
+servidor_ 6769 asus_rog  txt    REG   8,80    69624  38590 /tmp/so-final-i8p3a5a5/bin/servidor_shm_test
+servidor_ 6769 asus_rog  mem    REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+servidor_ 6769 asus_rog  DEL    REG    0,1           65584 /SYSV71f9ccfc
+servidor_ 6769 asus_rog  mem    REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+servidor_ 6769 asus_rog    0r  FIFO   0,15      0t0 716416 pipe
+servidor_ 6769 asus_rog    1w   REG   8,80       33  38597 /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+servidor_ 6769 asus_rog    2w   REG   8,80       33  38597 /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+$ ipcs -m
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+0x71f9ccfc 65584      asus_rog   660        808        1                       
+
+
+[exit 0]
+$ /tmp/so-final-i8p3a5a5/bin/cliente_shm_test
+client PID=6778
+
+1. Buscar ciudad
+2. Buscar pais
+3. Buscar ISO2
+4. Salir
+Opcion: 
+--- Connected, waiting for input ---
+$ python3 /tmp/so-final-i8p3a5a5/scripts/observe.py --server-pid 6769 --client-pid 6778
+Kernel: Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
+$ ps -o pid,ppid,stat,wchan,cmd -p 6769
+    PID    PPID STAT WCHAN  CMD
+   6769    6766 S+   futex_ /tmp/so-final-i8p3a5a5/bin/servidor_shm_test
+$ cat /proc/6769/status
+Name:	servidor_shm_te
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6769
+Ngid:	0
+Pid:	6769
+PPid:	6766
+TracerPid:	6766
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6769
+NSpid:	6769
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2708 kB
+VmSize:	    2708 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1816 kB
+VmRSS:	    1816 kB
+RssAnon:	     100 kB
+RssFile:	    1712 kB
+RssShmem:	       4 kB
+VmData:	     224 kB
+VmStk:	     132 kB
+VmExe:	      12 kB
+VmLib:	    1752 kB
+VmPTE:	      48 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000004002
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	124
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6769/wchan
+futex_do_wait
+$ ls -l /proc/6769/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[716416]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> anon_inode:[pidfd]
+$ lsof -p 6769
+COMMAND    PID     USER   FD      TYPE DEVICE SIZE/OFF   NODE NAME
+servidor_ 6769 asus_rog  cwd       DIR   8,80     4096  38465 /tmp/so-evidence-shm-ijlixhwj
+servidor_ 6769 asus_rog  rtd       DIR   8,80     4096      2 /
+servidor_ 6769 asus_rog  txt       REG   8,80    69624  38590 /tmp/so-final-i8p3a5a5/bin/servidor_shm_test
+servidor_ 6769 asus_rog  mem       REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+servidor_ 6769 asus_rog  DEL       REG    0,1           65584 /SYSV71f9ccfc
+servidor_ 6769 asus_rog  mem       REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+servidor_ 6769 asus_rog    0r     FIFO   0,15      0t0 716416 pipe
+servidor_ 6769 asus_rog    1w      REG   8,80       33  38597 /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+servidor_ 6769 asus_rog    2w      REG   8,80       33  38597 /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+servidor_ 6769 asus_rog    3u  a_inode    0,5        0  98752 [pidfd:6778]
+$ ps -o pid,ppid,stat,wchan,cmd -p 6778
+    PID    PPID STAT WCHAN  CMD
+   6778    6728 S+   poll_s /tmp/so-final-i8p3a5a5/bin/cliente_shm_test
+$ cat /proc/6778/status
+Name:	cliente_shm_tes
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6778
+Ngid:	0
+Pid:	6778
+PPid:	6728
+TracerPid:	0
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6778
+NSpid:	6778
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2704 kB
+VmSize:	    2704 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1816 kB
+VmRSS:	    1816 kB
+RssAnon:	     104 kB
+RssFile:	    1708 kB
+RssShmem:	       4 kB
+VmData:	     224 kB
+VmStk:	     132 kB
+VmExe:	       8 kB
+VmLib:	    1752 kB
+VmPTE:	      48 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000004002
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	1
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6778/wchan
+poll_schedule_timeout.constprop.0
+$ ls -l /proc/6778/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[723124]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> pipe:[723125]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> pipe:[723126]
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> /tmp/so-evidence-shm-ijlixhwj/shm-client.lock
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 4 -> anon_inode:[pidfd]
+$ lsof -p 6778
+COMMAND    PID     USER   FD      TYPE DEVICE SIZE/OFF   NODE NAME
+cliente_s 6778 asus_rog  cwd       DIR   8,80     4096  38465 /tmp/so-evidence-shm-ijlixhwj
+cliente_s 6778 asus_rog  rtd       DIR   8,80     4096      2 /
+cliente_s 6778 asus_rog  txt       REG   8,80    61176  38591 /tmp/so-final-i8p3a5a5/bin/cliente_shm_test
+cliente_s 6778 asus_rog  mem       REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+cliente_s 6778 asus_rog  DEL       REG    0,1           65584 /SYSV71f9ccfc
+cliente_s 6778 asus_rog  mem       REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+cliente_s 6778 asus_rog    0r     FIFO   0,15      0t0 723124 pipe
+cliente_s 6778 asus_rog    1w     FIFO   0,15      0t0 723125 pipe
+cliente_s 6778 asus_rog    2w     FIFO   0,15      0t0 723126 pipe
+cliente_s 6778 asus_rog    3uW     REG   8,80        0  38607 /tmp/so-evidence-shm-ijlixhwj/shm-client.lock
+cliente_s 6778 asus_rog    4u  a_inode    0,5        0  98743 [pidfd:6769]
+$ ipcs -m
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+0x71f9ccfc 65584      asus_rog   660        808        2                       
+
+
+[exit 0]
+$ ipcs -m -i 65584
+
+Shared memory Segment shmid=65584
+uid=1001	gid=1001	cuid=1001	cgid=1001
+mode=0660	access_perms=0660
+bytes=808	lpid=6778	cpid=6769	nattch=2
+att_time=Wed Oct 14 17:44:22 2026  
+det_time=Not set                   
+change_time=Wed Oct 14 17:44:22 2026  
+
+
+[exit 0]
+stdin -> 1\nTokyo\n
+Valor de busqueda: Ciudad: Tokyo                | Pais: Japan           | ISO2: JP | Region: Tōkyō              | Poblacion: 37732000
+Busqueda finalizada. Total coincidencias encontradas: 1
+
+1. Buscar ciudad
+2. Buscar pais
+3. Buscar ISO2
+4. Salir
+Opcion: 
+--- After Tokyo ---
+$ python3 /tmp/so-final-i8p3a5a5/scripts/observe.py --server-pid 6769 --client-pid 6778
+Kernel: Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
+$ ps -o pid,ppid,stat,wchan,cmd -p 6769
+    PID    PPID STAT WCHAN  CMD
+   6769    6766 S+   futex_ /tmp/so-final-i8p3a5a5/bin/servidor_shm_test
+$ cat /proc/6769/status
+Name:	servidor_shm_te
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6769
+Ngid:	0
+Pid:	6769
+PPid:	6766
+TracerPid:	6766
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6769
+NSpid:	6769
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2708 kB
+VmSize:	    2708 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1820 kB
+VmRSS:	    1820 kB
+RssAnon:	     104 kB
+RssFile:	    1712 kB
+RssShmem:	       4 kB
+VmData:	     224 kB
+VmStk:	     132 kB
+VmExe:	      12 kB
+VmLib:	    1752 kB
+VmPTE:	      48 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000004002
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	2443
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6769/wchan
+futex_do_wait
+$ ls -l /proc/6769/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[716416]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> anon_inode:[pidfd]
+$ lsof -p 6769
+COMMAND    PID     USER   FD      TYPE DEVICE SIZE/OFF   NODE NAME
+servidor_ 6769 asus_rog  cwd       DIR   8,80     4096  38465 /tmp/so-evidence-shm-ijlixhwj
+servidor_ 6769 asus_rog  rtd       DIR   8,80     4096      2 /
+servidor_ 6769 asus_rog  txt       REG   8,80    69624  38590 /tmp/so-final-i8p3a5a5/bin/servidor_shm_test
+servidor_ 6769 asus_rog  mem       REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+servidor_ 6769 asus_rog  DEL       REG    0,1           65584 /SYSV71f9ccfc
+servidor_ 6769 asus_rog  mem       REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+servidor_ 6769 asus_rog    0r     FIFO   0,15      0t0 716416 pipe
+servidor_ 6769 asus_rog    1w      REG   8,80       33  38597 /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+servidor_ 6769 asus_rog    2w      REG   8,80       33  38597 /tmp/so-final-i8p3a5a5/evidence/shm-server.txt
+servidor_ 6769 asus_rog    3u  a_inode    0,5        0  98752 [pidfd:6778]
+$ ps -o pid,ppid,stat,wchan,cmd -p 6778
+    PID    PPID STAT WCHAN  CMD
+   6778    6728 S+   poll_s /tmp/so-final-i8p3a5a5/bin/cliente_shm_test
+$ cat /proc/6778/status
+Name:	cliente_shm_tes
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6778
+Ngid:	0
+Pid:	6778
+PPid:	6728
+TracerPid:	0
+Uid:	1001	1001	1001	1001
+Gid:	1001	1001	1001	1001
+FDSize:	64
+Groups:	4 24 27 30 46 100 1000 1001 
+NStgid:	6778
+NSpid:	6778
+NSpgid:	6466
+NSsid:	6466
+Kthread:	0
+VmPeak:	    2704 kB
+VmSize:	    2704 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	    1816 kB
+VmRSS:	    1816 kB
+RssAnon:	     104 kB
+RssFile:	    1708 kB
+RssShmem:	       4 kB
+VmData:	     224 kB
+VmStk:	     132 kB
+VmExe:	       8 kB
+VmLib:	    1752 kB
+VmPTE:	      48 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	1
+SigQ:	0/31515
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000001000
+SigCgt:	0000000000004002
+CapInh:	0000000000000000
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	5
+nonvoluntary_ctxt_switches:	0
+
+$ cat /proc/6778/wchan
+poll_schedule_timeout.constprop.0
+$ ls -l /proc/6778/fd
+total 0
+lr-x------ 1 asus_rog asus_rog 64 Oct 14 17:44 0 -> pipe:[723124]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 1 -> pipe:[723125]
+l-wx------ 1 asus_rog asus_rog 64 Oct 14 17:44 2 -> pipe:[723126]
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 3 -> /tmp/so-evidence-shm-ijlixhwj/shm-client.lock
+lrwx------ 1 asus_rog asus_rog 64 Oct 14 17:44 4 -> anon_inode:[pidfd]
+$ lsof -p 6778
+COMMAND    PID     USER   FD      TYPE DEVICE SIZE/OFF   NODE NAME
+cliente_s 6778 asus_rog  cwd       DIR   8,80     4096  38465 /tmp/so-evidence-shm-ijlixhwj
+cliente_s 6778 asus_rog  rtd       DIR   8,80     4096      2 /
+cliente_s 6778 asus_rog  txt       REG   8,80    61176  38591 /tmp/so-final-i8p3a5a5/bin/cliente_shm_test
+cliente_s 6778 asus_rog  mem       REG   8,80  2129424  41469 /usr/lib/x86_64-linux-gnu/libc.so.6
+cliente_s 6778 asus_rog  DEL       REG    0,1           65584 /SYSV71f9ccfc
+cliente_s 6778 asus_rog  mem       REG   8,80   236616  41465 /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+cliente_s 6778 asus_rog    0r     FIFO   0,15      0t0 723124 pipe
+cliente_s 6778 asus_rog    1w     FIFO   0,15      0t0 723125 pipe
+cliente_s 6778 asus_rog    2w     FIFO   0,15      0t0 723126 pipe
+cliente_s 6778 asus_rog    3uW     REG   8,80        0  38607 /tmp/so-evidence-shm-ijlixhwj/shm-client.lock
+cliente_s 6778 asus_rog    4u  a_inode    0,5        0  98743 [pidfd:6769]
+$ ipcs -m
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+0x71f9ccfc 65584      asus_rog   660        808        2                       
+
+
+[exit 0]
+$ kill -9 6769  # owned server launched above
+server/strace exit=-9
+
+Sesion SHM: Broken pipe
+
+client exit=1
+--- Residual segment after both detach ---
+$ ipcs -m -i 65584
+
+Shared memory Segment shmid=65584
+uid=1001	gid=1001	cuid=1001	cgid=1001
+mode=0660	access_perms=0660
+bytes=808	lpid=6778	cpid=6769	nattch=0
+att_time=Wed Oct 14 17:44:22 2026  
+det_time=Wed Oct 14 17:44:22 2026  
+change_time=Wed Oct 14 17:44:22 2026  
+
+
+[exit 0]
+$ python3 /tmp/so-final-i8p3a5a5/scripts/cleanup_ipc.py --shmid 65584 --key 1912196348 --client-lock /tmp/so-evidence-shm-ijlixhwj/shm-client.lock
+Segmento residual 65584 eliminado con ipcrm.
+
+[exit 0]
+$ ipcs -m -i 65584
+ipcs: id 65584 not found
+
+[exit 0]
+Verified shmget(private key): ENOENT

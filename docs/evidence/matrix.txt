@@ -1,0 +1,167 @@
+Source commit: f5156c2db2fbd6b478580fde5553f87e1938f806
+Command: make test (clean git archive)
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror src/servidor_fifo.c src/dataset.c src/ipc_utils.c   -o servidor_fifo
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror src/cliente_fifo.c src/ipc_utils.c src/console_input.c   -o cliente_fifo
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror src/servidor_shm.c src/dataset.c src/shm_utils.c   -pthread -o servidor_shm
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror src/cliente_shm.c src/shm_utils.c src/console_input.c   -pthread -o cliente_shm
+mkdir -p bin
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror tests/test_parser.c src/dataset.c   -o bin/test_parser
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror tests/test_dataset.c src/dataset.c -Wl,--wrap=getline,--wrap=__getdelim,--wrap=ferror,--wrap=fclose   -o bin/test_dataset
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror tests/test_ipc.c src/ipc_utils.c -Wl,--wrap=ppoll   -o bin/test_ipc
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror -DFIFO_REQ='"request.fifo"' -DFIFO_RESP='"response.fifo"' -DFIFO_LOCK='"server.lock"' src/servidor_fifo.c src/dataset.c src/ipc_utils.c   -o bin/servidor_fifo_test
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror -DFIFO_REQ='"request.fifo"' -DFIFO_RESP='"response.fifo"' -DFIFO_LOCK='"server.lock"' src/cliente_fifo.c src/ipc_utils.c src/console_input.c   -o bin/cliente_fifo_test
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror -DSHM_TEST_BUILD -DSHM_CLIENT_LOCK='"shm-client.lock"' src/servidor_shm.c src/dataset.c src/shm_utils.c   -pthread -o bin/servidor_shm_test
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror -DSHM_TEST_BUILD -DSHM_CLIENT_LOCK='"shm-client.lock"' src/cliente_shm.c src/shm_utils.c src/console_input.c   -pthread -o bin/cliente_shm_test
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror -DSHM_TEST_BUILD -DSHM_CLIENT_LOCK='"shm-client.lock"' tests/shm_probe.c src/shm_utils.c -pthread -o bin/shm_probe
+gcc -D_GNU_SOURCE -Iinclude -O2 -g -std=c11 -Wall -Wextra -Wpedantic -Werror -fPIC -shared tests/shm_faults.c -ldl -o bin/shm_faults.so
+./bin/test_parser
+==================================================
+EJECUTANDO SUITE DE PRUEBAS UNITARIAS: DATASET & PARSER
+Dataset objetivo: data/worldcities.csv
+==================================================
+
+==================================================
+TEST: Ciudad Tokyo (Exacta) (Op: 1, Criterio: 'Tokyo')
+==================================================
+    [ROW 1] Ciudad: Tokyo                | Pais: Japan           | ISO2: JP | Region: Tōkyō              | Poblacion: 37732000
+    [END] Busqueda finalizada. Total coincidencias encontradas: 1
+--> Coincidencias retornadas: 1 (Filas emitidas: 1, Fin: 1, NoFound: 0, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+TEST: Ciudad tokyo (Minusculas) (Op: 1, Criterio: 'tokyo')
+==================================================
+    [ROW 1] Ciudad: Tokyo                | Pais: Japan           | ISO2: JP | Region: Tōkyō              | Poblacion: 37732000
+    [END] Busqueda finalizada. Total coincidencias encontradas: 1
+--> Coincidencias retornadas: 1 (Filas emitidas: 1, Fin: 1, NoFound: 0, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+TEST: Ciudad Bogota (Capital y US) (Op: 1, Criterio: 'Bogota')
+==================================================
+    [ROW 1] Ciudad: Bogota               | Pais: Colombia        | ISO2: CO | Region: Bogotá              | Poblacion: 7968095
+    [ROW 2] Ciudad: Bogota               | Pais: United States   | ISO2: US | Region: New Jersey           | Poblacion: 8830
+    [END] Busqueda finalizada. Total coincidencias encontradas: 2
+--> Coincidencias retornadas: 2 (Filas emitidas: 2, Fin: 1, NoFound: 0, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+TEST: Pais Colombia (714 ciudades) (Op: 2, Criterio: 'Colombia')
+==================================================
+    [ROW 1] Ciudad: Bogota               | Pais: Colombia        | ISO2: CO | Region: Bogotá              | Poblacion: 7968095
+    [ROW 2] Ciudad: Timbio               | Pais: Colombia        | ISO2: CO | Region: Cauca                | Poblacion: 4444444
+    [ROW 3] Ciudad: Medellin             | Pais: Colombia        | ISO2: CO | Region: Antioquia            | Poblacion: 2529403
+    ... (mostrando solo primeras 3 filas para brevedad) ...
+    [END] Busqueda finalizada. Total coincidencias encontradas: 714
+--> Coincidencias retornadas: 714 (Filas emitidas: 714, Fin: 1, NoFound: 0, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+TEST: Pais colombia (Minusculas) (Op: 2, Criterio: 'colombia')
+==================================================
+    [ROW 1] Ciudad: Bogota               | Pais: Colombia        | ISO2: CO | Region: Bogotá              | Poblacion: 7968095
+    [ROW 2] Ciudad: Timbio               | Pais: Colombia        | ISO2: CO | Region: Cauca                | Poblacion: 4444444
+    [ROW 3] Ciudad: Medellin             | Pais: Colombia        | ISO2: CO | Region: Antioquia            | Poblacion: 2529403
+    ... (mostrando solo primeras 3 filas para brevedad) ...
+    [END] Busqueda finalizada. Total coincidencias encontradas: 714
+--> Coincidencias retornadas: 714 (Filas emitidas: 714, Fin: 1, NoFound: 0, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+TEST: Codigo ISO2 'CO' (Op: 3, Criterio: 'CO')
+==================================================
+    [ROW 1] Ciudad: Bogota               | Pais: Colombia        | ISO2: CO | Region: Bogotá              | Poblacion: 7968095
+    [ROW 2] Ciudad: Timbio               | Pais: Colombia        | ISO2: CO | Region: Cauca                | Poblacion: 4444444
+    [ROW 3] Ciudad: Medellin             | Pais: Colombia        | ISO2: CO | Region: Antioquia            | Poblacion: 2529403
+    ... (mostrando solo primeras 3 filas para brevedad) ...
+    [END] Busqueda finalizada. Total coincidencias encontradas: 714
+--> Coincidencias retornadas: 714 (Filas emitidas: 714, Fin: 1, NoFound: 0, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+TEST: Codigo ISO2 'JP' (Op: 3, Criterio: 'JP')
+==================================================
+    [ROW 1] Ciudad: Tokyo                | Pais: Japan           | ISO2: JP | Region: Tōkyō              | Poblacion: 37732000
+    [ROW 2] Ciudad: Osaka                | Pais: Japan           | ISO2: JP | Region: Ōsaka               | Poblacion: 15126000
+    [ROW 3] Ciudad: Nagoya               | Pais: Japan           | ISO2: JP | Region: Aichi                | Poblacion: 9197000
+    ... (mostrando solo primeras 3 filas para brevedad) ...
+    [END] Busqueda finalizada. Total coincidencias encontradas: 1253
+--> Coincidencias retornadas: 1253 (Filas emitidas: 1253, Fin: 1, NoFound: 0, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+TEST: Ciudad Inexistente (AtlantisCity) (Op: 1, Criterio: 'AtlantisCity')
+==================================================
+    [NOT_FOUND] No se encontraron registros para la busqueda: 'AtlantisCity'
+    [END] Busqueda finalizada. Total coincidencias encontradas: 0
+--> Coincidencias retornadas: 0 (Filas emitidas: 0, Fin: 1, NoFound: 1, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+TEST: Pais Inexistente (PaisInventado) (Op: 2, Criterio: 'PaisInventado')
+==================================================
+    [NOT_FOUND] No se encontraron registros para la busqueda: 'PaisInventado'
+    [END] Busqueda finalizada. Total coincidencias encontradas: 0
+--> Coincidencias retornadas: 0 (Filas emitidas: 0, Fin: 1, NoFound: 1, Errores: 0)
+--> RESULTADO: PASS [OK]
+
+==================================================
+PASARON LAS NUEVE BUSQUEDAS DE REGRESION DEL DATASET
+==================================================
+./bin/test_dataset
+PASS dataset: CSV estricto, contrato, callbacks, errores de lectura/cierre.
+./bin/test_ipc
+PASS IPC: fragmentacion, EOF parcial, EINTR con progreso, EPIPE y cancelacion.
+python3 tests/test_fifo.py
+test_batch_queries (__main__.FifoTests.test_batch_queries) ... ok
+test_dataset_error_is_terminal (__main__.FifoTests.test_dataset_error_is_terminal) ... ok
+test_disconnect_during_response (__main__.FifoTests.test_disconnect_during_response) ... ok
+test_eof_and_last_line (__main__.FifoTests.test_eof_and_last_line) ... ok
+test_foreign_file_and_symlink_preserved (__main__.FifoTests.test_foreign_file_and_symlink_preserved) ... ok
+test_fragmented_request_and_partial_eof (__main__.FifoTests.test_fragmented_request_and_partial_eof) ... ok
+test_gradual_queries (__main__.FifoTests.test_gradual_queries) ... ok
+test_invalid_request_is_terminal (__main__.FifoTests.test_invalid_request_is_terminal) ... ok
+test_missing_dataset_is_terminal (__main__.FifoTests.test_missing_dataset_is_terminal) ... ok
+test_oversize_and_invalid_input_preserve_next_lines (__main__.FifoTests.test_oversize_and_invalid_input_preserve_next_lines) ... ok
+test_replaced_fifo_not_unlinked (__main__.FifoTests.test_replaced_fifo_not_unlinked) ... ok
+test_reused_fifos_and_second_server (__main__.FifoTests.test_reused_fifos_and_second_server) ... ok
+test_signals_before_connection (__main__.FifoTests.test_signals_before_connection) ... ok
+test_signals_during_dataset_read (__main__.FifoTests.test_signals_during_dataset_read) ... ok
+test_signals_waiting_request_and_backpressure (__main__.FifoTests.test_signals_waiting_request_and_backpressure) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 1.834s
+
+OK
+python3 tests/test_shm.py
+test_batch_and_nine_searches (__main__.ShmTests.test_batch_and_nine_searches) ... ok
+test_cleanup_rejects_active_and_wrong_key (__main__.ShmTests.test_cleanup_rejects_active_and_wrong_key) ... ok
+test_client_signals_at_prompt (__main__.ShmTests.test_client_signals_at_prompt) ... ok
+test_client_signals_waiting_response (__main__.ShmTests.test_client_signals_waiting_response) ... ok
+test_dataset_errors_terminal (__main__.ShmTests.test_dataset_errors_terminal) ... ok
+test_death_during_request_or_ack (__main__.ShmTests.test_death_during_request_or_ack) ... ok
+test_delayed_initialization (__main__.ShmTests.test_delayed_initialization) ... ok
+test_eof_last_line_and_oversize (__main__.ShmTests.test_eof_last_line_and_oversize) ... ok
+test_gradual_queries (__main__.ShmTests.test_gradual_queries) ... ok
+test_incompatible_segment_and_version (__main__.ShmTests.test_incompatible_segment_and_version) ... ok
+test_initialization_timeout (__main__.ShmTests.test_initialization_timeout) ... ok
+test_invalid_requests (__main__.ShmTests.test_invalid_requests) ... ok
+test_partial_initialization_failures (__main__.ShmTests.test_partial_initialization_failures) ... ok
+test_real_client_detects_server_death (__main__.ShmTests.test_real_client_detects_server_death) ... ok
+test_second_server_and_client (__main__.ShmTests.test_second_server_and_client) ... ok
+test_server_signals_idle_and_connected (__main__.ShmTests.test_server_signals_idle_and_connected) ... ok
+test_signal_during_dataset_read (__main__.ShmTests.test_signal_during_dataset_read) ... ok
+test_signals_while_waiting_ack (__main__.ShmTests.test_signals_while_waiting_ack) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 17.151s
+
+OK
+python3 tests/test_cleanup.py
+test_inactive_active_and_foreign_paths (__main__.CleanupTests.test_inactive_active_and_foreign_paths) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.259s
+
+OK
+INFO: /proc restringido; verificada negativa conservadora de limpieza FIFO.

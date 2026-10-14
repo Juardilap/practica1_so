@@ -1,0 +1,1 @@
+Servidor SHM listo. SHMID: 65584
